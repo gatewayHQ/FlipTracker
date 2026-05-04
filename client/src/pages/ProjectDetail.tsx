@@ -60,15 +60,18 @@ export default function ProjectDetail() {
   };
 
   const handleToggleMilestone = async (m: Milestone) => {
-    const completed = m.completed ? 0 : 1;
-    const completed_date = completed ? new Date().toISOString().slice(0, 10) : '';
+    const completed = !m.completed;
+    const completed_date = completed ? new Date().toISOString().slice(0, 10) : null;
     await api.milestones.update(id!, m.id, { completed, completed_date });
     loadProject();
   };
 
   const handleAddMilestone = async () => {
     if (!newMilestone.title.trim()) return;
-    await api.milestones.create(id!, newMilestone);
+    await api.milestones.create(id!, {
+      title: newMilestone.title,
+      due_date: newMilestone.due_date || null,
+    });
     setNewMilestone({ title: '', due_date: '' });
     setAddingMilestone(false);
     loadProject();

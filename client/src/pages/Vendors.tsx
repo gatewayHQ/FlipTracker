@@ -63,7 +63,7 @@ export default function Vendors() {
   const openEdit = (v: Vendor) => {
     setForm({
       name: v.name, company: v.company, phone: v.phone, email: v.email,
-      specialty: v.specialty, rating: String(v.rating), hourly_rate: String(v.hourly_rate || ''), notes: v.notes,
+      specialty: v.specialty, rating: String(v.rating), hourly_rate: String(v.hourly_rate || ''), notes: v.notes ?? '',
     });
     setEditingId(v.id);
     setShowForm(true);

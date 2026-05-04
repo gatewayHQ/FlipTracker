@@ -3,11 +3,12 @@ export type PhaseStatus = 'pending' | 'in_progress' | 'completed';
 
 export interface Project {
   id: string;
+  user_id?: string;
   name: string;
   address: string;
   city: string;
   state: string;
-  zip: string;
+  zip: string | null;
   status: ProjectStatus;
   purchase_price: number;
   legal_fees: number;
@@ -19,15 +20,16 @@ export interface Project {
   holding_costs_monthly: number;
   estimated_sale_price: number;
   actual_sale_price: number;
-  acquisition_date: string;
-  target_completion_date: string;
-  actual_completion_date: string;
-  listed_date: string;
-  sold_date: string;
-  notes: string;
+  // Supabase returns date columns as "YYYY-MM-DD" string or null
+  acquisition_date: string | null;
+  target_completion_date: string | null;
+  actual_completion_date: string | null;
+  listed_date: string | null;
+  sold_date: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
-  // enriched
+  // enriched fields added client-side
   phase_count?: number;
   completed_phases?: number;
   progress?: number;
@@ -52,19 +54,21 @@ export interface ProjectDetail extends Project {
 export interface RenovationPhase {
   id: string;
   project_id: string;
+  user_id?: string;
   phase_name: string;
   status: PhaseStatus;
   budget: number;
   actual_cost: number;
-  start_date: string;
-  target_date: string;
-  end_date: string;
-  notes: string;
+  start_date: string | null;
+  target_date: string | null;
+  end_date: string | null;
+  notes: string | null;
   created_at: string;
 }
 
 export interface Vendor {
   id: string;
+  user_id?: string;
   name: string;
   company: string;
   phone: string;
@@ -72,7 +76,7 @@ export interface Vendor {
   specialty: string;
   rating: number;
   hourly_rate: number;
-  notes: string;
+  notes: string | null;
   created_at: string;
 }
 
@@ -84,10 +88,11 @@ export interface ProjectVendor {
   id: string;
   project_id: string;
   vendor_id: string;
-  phase_name: string;
+  user_id?: string;
+  phase_name: string | null;
   contracted_amount: number;
   paid_amount: number;
-  notes: string;
+  notes: string | null;
   created_at: string;
   vendor_name?: string;
   company?: string;
@@ -102,23 +107,25 @@ export interface ProjectVendor {
 export interface Expense {
   id: string;
   project_id: string;
+  user_id?: string;
   category: string;
   description: string;
   amount: number;
   date: string;
-  vendor_id: string;
-  notes: string;
+  vendor_id: string | null;
+  notes: string | null;
   created_at: string;
 }
 
 export interface Milestone {
   id: string;
   project_id: string;
+  user_id?: string;
   title: string;
-  due_date: string;
-  completed: number;
-  completed_date: string;
-  notes: string;
+  due_date: string | null;
+  completed: boolean;          // PostgreSQL boolean (not SQLite 0/1)
+  completed_date: string | null;
+  notes: string | null;
   created_at: string;
 }
 

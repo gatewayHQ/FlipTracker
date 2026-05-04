@@ -80,7 +80,7 @@ export default function AddProject() {
     api.projects.get(id).then((data) => {
       const p = data as ProjectDetail;
       setForm({
-        name: p.name, address: p.address, city: p.city, state: p.state, zip: p.zip,
+        name: p.name, address: p.address, city: p.city, state: p.state, zip: p.zip ?? '',
         status: p.status,
         purchase_price: String(p.purchase_price || ''),
         legal_fees: String(p.legal_fees || ''),
@@ -116,6 +116,9 @@ export default function AddProject() {
     setSaving(true);
     setError('');
 
+    // PostgreSQL date columns require null, not empty string
+    const dateOrNull = (v: string) => v.trim() || null;
+
     const payload = {
       ...form,
       name: form.name || form.address,
@@ -130,6 +133,10 @@ export default function AddProject() {
       holding_costs_monthly: parseFloat(form.holding_costs_monthly) || 0,
       estimated_sale_price: parseFloat(form.estimated_sale_price) || 0,
       actual_sale_price: parseFloat(form.actual_sale_price) || 0,
+      acquisition_date: dateOrNull(form.acquisition_date),
+      target_completion_date: dateOrNull(form.target_completion_date),
+      listed_date: dateOrNull(form.listed_date),
+      sold_date: dateOrNull(form.sold_date),
       phases: isEdit ? undefined : phases,
     };
 

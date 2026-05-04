@@ -3,19 +3,26 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, FolderKanban, Wallet, TrendingUp, Clock, Bell, Search, User } from 'lucide-react';
 import StatCard from '../components/StatCard';
 import ProjectCard from '../components/ProjectCard';
+import { SkeletonStatCard, EmptyState, useToast } from '../components/ui';
 import { api, fmt } from '../lib/api';
 import type { DashboardData } from '../types';
 
 export default function Portfolio() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.dashboard.get().then((d) => {
-      setData(d as DashboardData);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    api.dashboard.get()
+      .then((d) => {
+        setData(d as DashboardData);
+        setLoading(false);
+      })
+      .catch(() => {
+        toast.error('Failed to load dashboard');
+        setLoading(false);
+      });
   }, []);
 
   const stats = data?.stats;
@@ -60,13 +67,10 @@ export default function Portfolio() {
 
         {loading ? (
           <div className="space-y-4">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="card animate-pulse">
-                <div className="h-4 bg-surface-400 rounded w-32 mb-3" />
-                <div className="h-8 bg-surface-400 rounded w-20 mb-2" />
-                <div className="h-3 bg-surface-400 rounded w-28" />
-              </div>
-            ))}
+            <SkeletonStatCard />
+            <SkeletonStatCard />
+            <SkeletonStatCard />
+            <SkeletonStatCard />
           </div>
         ) : (
           <>
@@ -102,7 +106,7 @@ export default function Portfolio() {
               icon={<Clock size={22} />}
             />
 
-            {data && data.recentProjects.length > 0 && (
+            {data && data.recentProjects.length > 0 ? (
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-sm font-bold text-white uppercase tracking-widest">Active Projects</h2>
@@ -116,6 +120,13 @@ export default function Portfolio() {
                   ))}
                 </div>
               </div>
+            ) : (
+              <EmptyState
+                icon={<FolderKanban size={32} />}
+                title="No projects yet"
+                description="Add your first flip to start tracking your portfolio."
+                action={{ label: 'Add First Project', onClick: () => navigate('/projects/new') }}
+              />
             )}
           </>
         )}

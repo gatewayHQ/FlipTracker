@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp, Award, Clock, DollarSign } from 'lucide-react';
+import { SkeletonList, EmptyState, useToast } from '../components/ui';
 import { api, fmt } from '../lib/api';
 import type { Project } from '../types';
 import { STATUS_COLORS } from '../types';
@@ -24,14 +25,20 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export default function Analytics() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.projects.list().then(data => {
-      setProjects(data as Project[]);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    api.projects.list()
+      .then(data => {
+        setProjects(data as Project[]);
+        setLoading(false);
+      })
+      .catch(() => {
+        toast.error('Failed to load analytics');
+        setLoading(false);
+      });
   }, []);
 
   const active = projects.filter(p => p.status !== 'cancelled');
@@ -52,7 +59,7 @@ export default function Analytics() {
 
   const totalProfit = chartData.reduce((s, d) => s + d.profit, 0);
   const avgRoi = chartData.length > 0 ? (chartData.reduce((s, d) => s + d.roi, 0) / chartData.length).toFixed(1) : '0';
-  const bestProject = chartData.sort((a, b) => b.profit - a.profit)[0];
+  const bestProject = [...chartData].sort((a, b) => b.profit - a.profit)[0];
 
   const soldProjects = projects.filter(p => p.status === 'sold');
   const avgDays = soldProjects.length > 0
@@ -67,14 +74,6 @@ export default function Analytics() {
     count: projects.filter(p => p.status === s).length,
   })).filter(s => s.count > 0);
 
-  if (loading) {
-    return (
-      <div className="min-h-full bg-surface-900 flex items-center justify-center">
-        <div className="text-gray-400 animate-pulse">Loading...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-full bg-surface-900">
       <div className="px-5 pt-12 pb-4">
@@ -83,14 +82,15 @@ export default function Analytics() {
       </div>
 
       <div className="px-5 pb-8 space-y-5">
-        {projects.length === 0 ? (
-          <div className="card text-center py-16">
-            <TrendingUp size={40} className="text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400">Add projects to see analytics.</p>
-            <button onClick={() => navigate('/projects/new')} className="mt-4 text-brand text-sm font-semibold">
-              Add First Project →
-            </button>
-          </div>
+        {loading ? (
+          <SkeletonList count={5} />
+        ) : projects.length === 0 ? (
+          <EmptyState
+            icon={<TrendingUp size={40} />}
+            title="No data yet"
+            description="Add projects to see analytics and performance insights."
+            action={{ label: 'Add First Project', onClick: () => navigate('/projects/new') }}
+          />
         ) : (
           <>
             {/* KPI Row */}

@@ -1,30 +1,25 @@
 import { useState } from 'react';
 import { User, Bell, Shield, HelpCircle, ChevronRight, Moon, DollarSign, TrendingUp, Building2, LogOut } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
-
-interface SettingRow {
-  icon: any;
-  label: string;
-  sub?: string;
-  type?: 'toggle' | 'chevron' | 'text';
-  value?: boolean;
-  key?: string;
-}
+import { Button, Input, useToast } from '../components/ui';
 
 export default function Settings() {
   const { user, signOut } = useAuth();
+  const { toast } = useToast();
   const [notifications, setNotifications] = useState(true);
   const [darkMode] = useState(true);
   const [name, setName] = useState('');
   const [capitalGoal, setCapitalGoal] = useState('');
+  const [signingOut, setSigningOut] = useState(false);
 
-  const profileRows: SettingRow[] = [
-    { icon: Bell, label: 'Push Notifications', type: 'toggle', value: notifications, key: 'notifications' },
-    { icon: Moon, label: 'Dark Mode', type: 'toggle', value: darkMode, key: 'darkMode' },
-  ];
-
-  const toggle = (key: string) => {
-    if (key === 'notifications') setNotifications(p => !p);
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } catch {
+      toast.error('Failed to sign out');
+      setSigningOut(false);
+    }
   };
 
   return (
@@ -45,23 +40,31 @@ export default function Settings() {
               <p className="text-xs text-gray-400">{user?.email}</p>
             </div>
           </div>
-          <div>
-            <label className="label">Display Name</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Jane Investor" className="input-field" />
-          </div>
+          <Input
+            label="Display Name"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Jane Investor"
+          />
         </div>
 
         {/* Preferences */}
         <div className="card space-y-1">
           <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Preferences</h2>
-          {profileRows.map(row => (
-            <div key={row.key} className="flex items-center justify-between py-3 border-b border-surface-400/20 last:border-0">
+          {[
+            { icon: Bell, label: 'Push Notifications', value: notifications, onToggle: () => setNotifications(p => !p) },
+            { icon: Moon, label: 'Dark Mode', value: darkMode, onToggle: () => {} },
+          ].map(row => (
+            <div key={row.label} className="flex items-center justify-between py-3 border-b border-surface-400/20 last:border-0">
               <div className="flex items-center gap-3">
-                <row.icon size={18} className="text-gray-400" />
+                <row.icon size={18} className="text-gray-400" aria-hidden />
                 <span className="text-sm text-white">{row.label}</span>
               </div>
               <button
-                onClick={() => toggle(row.key!)}
+                onClick={row.onToggle}
+                role="switch"
+                aria-checked={row.value}
+                aria-label={row.label}
                 className={`w-12 h-6 rounded-full transition-colors relative ${row.value ? 'bg-brand' : 'bg-surface-400'}`}
               >
                 <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${row.value ? 'left-7' : 'left-1'}`} />
@@ -73,34 +76,27 @@ export default function Settings() {
         {/* Investment Goals */}
         <div className="card space-y-4">
           <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400">Investment Goals</h2>
-          <div>
-            <label className="label">Annual Capital Goal</label>
-            <div className="relative">
-              <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-              <input
-                value={capitalGoal}
-                onChange={e => setCapitalGoal(e.target.value)}
-                placeholder="500,000"
-                type="number"
-                className="input-field pl-8"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="label">Target ROI per Flip</label>
-            <div className="relative">
-              <TrendingUp size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-              <input placeholder="15" type="number" className="input-field pl-8" />
-            </div>
-            <p className="text-xs text-gray-500 mt-1">Percentage</p>
-          </div>
-          <div>
-            <label className="label">Target Flip Duration (days)</label>
-            <div className="relative">
-              <Building2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-              <input placeholder="90" type="number" className="input-field pl-8" />
-            </div>
-          </div>
+          <Input
+            label="Annual Capital Goal"
+            type="number"
+            prefix="$"
+            value={capitalGoal}
+            onChange={e => setCapitalGoal(e.target.value)}
+            placeholder="500,000"
+          />
+          <Input
+            label="Target ROI per Flip"
+            type="number"
+            leftIcon={<TrendingUp size={14} />}
+            placeholder="15"
+            helper="Percentage"
+          />
+          <Input
+            label="Target Flip Duration (days)"
+            type="number"
+            leftIcon={<Building2 size={14} />}
+            placeholder="90"
+          />
         </div>
 
         {/* About */}
@@ -112,7 +108,7 @@ export default function Settings() {
           ].map(({ icon: Icon, label }) => (
             <button key={label} className="flex items-center justify-between w-full py-3 border-b border-surface-400/20 last:border-0">
               <div className="flex items-center gap-3">
-                <Icon size={18} className="text-gray-400" />
+                <Icon size={18} className="text-gray-400" aria-hidden />
                 <span className="text-sm text-white">{label}</span>
               </div>
               <ChevronRight size={16} className="text-gray-500" />
@@ -131,13 +127,16 @@ export default function Settings() {
           <p className="text-xs text-gray-600 mt-1">Built for serious investors</p>
         </div>
 
-        <button
-          onClick={signOut}
-          className="w-full flex items-center justify-center gap-2 py-4 rounded-xl border border-red-500/30 text-red-400 font-semibold text-sm hover:bg-red-500/10 transition-colors"
+        <Button
+          variant="danger"
+          fullWidth
+          size="lg"
+          loading={signingOut}
+          onClick={handleSignOut}
+          leftIcon={<LogOut size={16} />}
         >
-          <LogOut size={16} />
           Sign Out
-        </button>
+        </Button>
       </div>
     </div>
   );

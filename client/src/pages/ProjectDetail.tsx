@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ChevronLeft, Edit2, Trash2, Plus, Check, Clock, DollarSign,
-  Wrench, Users, FileText, ChevronDown, ChevronUp, X, MapPin,
+  Wrench, Users, FileText, MapPin,
 } from 'lucide-react';
 import DonutChart from '../components/DonutChart';
+import { SkeletonList, EmptyState, Modal, Sheet, ProgressBar, Button, Input, Select, useToast } from '../components/ui';
 import { api, fmt, fmtFull, fmtDate, fmtDateShort } from '../lib/api';
 import type { ProjectDetail as PD, RenovationPhase, Milestone, Vendor, Expense } from '../types';
 import { STATUS_COLORS, EXPENSE_CATEGORIES } from '../types';
@@ -20,26 +21,33 @@ const PHASE_STATUS_COLORS: Record<string, string> = {
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [project, setProject] = useState<PD | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('overview');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [allVendors, setAllVendors] = useState<Vendor[]>([]);
 
-  // Milestone add form
+  // Milestone sheet
+  const [milestoneSheetOpen, setMilestoneSheetOpen] = useState(false);
   const [newMilestone, setNewMilestone] = useState({ title: '', due_date: '' });
-  const [addingMilestone, setAddingMilestone] = useState(false);
+  const [savingMilestone, setSavingMilestone] = useState(false);
 
-  // Expense add form
+  // Expense sheet
+  const [expenseSheetOpen, setExpenseSheetOpen] = useState(false);
   const [newExpense, setNewExpense] = useState({ category: 'labor', description: '', amount: '', date: new Date().toISOString().slice(0, 10) });
-  const [addingExpense, setAddingExpense] = useState(false);
+  const [savingExpense, setSavingExpense] = useState(false);
 
   const loadProject = () => {
     if (!id) return;
     api.projects.get(id).then(d => {
       setProject(d as PD);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => {
+      toast.error('Failed to load project');
+      setLoading(false);
+    });
   };
 
   useEffect(() => {
@@ -49,79 +57,126 @@ export default function ProjectDetail() {
 
   const handleDeleteProject = async () => {
     if (!id) return;
-    await api.projects.delete(id);
-    navigate('/projects');
+    setDeleteLoading(true);
+    try {
+      await api.projects.delete(id);
+      navigate('/projects');
+    } catch {
+      toast.error('Failed to delete project');
+      setDeleteLoading(false);
+      setShowDeleteConfirm(false);
+    }
   };
 
   const handlePhaseStatusCycle = async (phase: RenovationPhase) => {
     const next: Record<string, string> = { pending: 'in_progress', in_progress: 'completed', completed: 'pending' };
-    await api.phases.update(id!, phase.id, { status: next[phase.status] });
-    loadProject();
+    try {
+      await api.phases.update(id!, phase.id, { status: next[phase.status] });
+      loadProject();
+    } catch {
+      toast.error('Failed to update phase');
+    }
   };
 
   const handleToggleMilestone = async (m: Milestone) => {
     const completed = !m.completed;
     const completed_date = completed ? new Date().toISOString().slice(0, 10) : null;
-    await api.milestones.update(id!, m.id, { completed, completed_date });
-    loadProject();
+    try {
+      await api.milestones.update(id!, m.id, { completed, completed_date });
+      loadProject();
+    } catch {
+      toast.error('Failed to update milestone');
+    }
   };
 
   const handleAddMilestone = async () => {
     if (!newMilestone.title.trim()) return;
-    await api.milestones.create(id!, {
-      title: newMilestone.title,
-      due_date: newMilestone.due_date || null,
-    });
-    setNewMilestone({ title: '', due_date: '' });
-    setAddingMilestone(false);
-    loadProject();
+    setSavingMilestone(true);
+    try {
+      await api.milestones.create(id!, {
+        title: newMilestone.title,
+        due_date: newMilestone.due_date || null,
+      });
+      setNewMilestone({ title: '', due_date: '' });
+      setMilestoneSheetOpen(false);
+      toast.success('Milestone added');
+      loadProject();
+    } catch {
+      toast.error('Failed to add milestone');
+    } finally {
+      setSavingMilestone(false);
+    }
   };
 
   const handleDeleteMilestone = async (milestoneId: string) => {
-    await api.milestones.delete(id!, milestoneId);
-    loadProject();
+    try {
+      await api.milestones.delete(id!, milestoneId);
+      loadProject();
+    } catch {
+      toast.error('Failed to delete milestone');
+    }
   };
 
   const handleAddExpense = async () => {
     if (!newExpense.description.trim() || !newExpense.amount) return;
-    await api.expenses.create(id!, { ...newExpense, amount: parseFloat(newExpense.amount) });
-    setNewExpense({ category: 'labor', description: '', amount: '', date: new Date().toISOString().slice(0, 10) });
-    setAddingExpense(false);
-    loadProject();
+    setSavingExpense(true);
+    try {
+      await api.expenses.create(id!, { ...newExpense, amount: parseFloat(newExpense.amount) });
+      setNewExpense({ category: 'labor', description: '', amount: '', date: new Date().toISOString().slice(0, 10) });
+      setExpenseSheetOpen(false);
+      toast.success('Expense logged');
+      loadProject();
+    } catch {
+      toast.error('Failed to add expense');
+    } finally {
+      setSavingExpense(false);
+    }
   };
 
   const handleDeleteExpense = async (expenseId: string) => {
-    await api.expenses.delete(id!, expenseId);
-    loadProject();
+    try {
+      await api.expenses.delete(id!, expenseId);
+      loadProject();
+    } catch {
+      toast.error('Failed to delete expense');
+    }
   };
 
   const handleAttachVendor = async (vendorId: string) => {
     try {
       await api.vendors.attachToProject(vendorId, id!, {});
       loadProject();
-    } catch {}
+    } catch {
+      toast.error('Failed to attach vendor');
+    }
   };
 
   const handleDetachVendor = async (vendorId: string) => {
-    await api.vendors.detachFromProject(vendorId, id!);
-    loadProject();
+    try {
+      await api.vendors.detachFromProject(vendorId, id!);
+      loadProject();
+    } catch {
+      toast.error('Failed to detach vendor');
+    }
   };
 
   if (loading) {
     return (
-      <div className="min-h-full bg-surface-900 flex items-center justify-center">
-        <div className="text-gray-400 animate-pulse">Loading...</div>
+      <div className="min-h-full bg-surface-900 px-5 pt-16">
+        <SkeletonList count={5} />
       </div>
     );
   }
 
   if (!project) {
     return (
-      <div className="min-h-full bg-surface-900 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-400 mb-4">Project not found</p>
-          <button onClick={() => navigate('/projects')} className="text-brand">Back to Projects</button>
-        </div>
+      <div className="min-h-full bg-surface-900 flex items-center justify-center px-5">
+        <EmptyState
+          icon={<FileText size={28} />}
+          title="Project not found"
+          description="This project may have been deleted."
+          action={{ label: 'Back to Projects', onClick: () => navigate('/projects') }}
+        />
       </div>
     );
   }
@@ -150,7 +205,7 @@ export default function ProjectDetail() {
     <div className="min-h-full bg-surface-900">
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-12 pb-4">
-        <button onClick={() => navigate('/projects')} className="text-brand">
+        <button onClick={() => navigate('/projects')} className="text-brand" aria-label="Back to projects">
           <ChevronLeft size={28} />
         </button>
         <div className="text-center flex-1 mx-4">
@@ -161,10 +216,10 @@ export default function ProjectDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => navigate(`/projects/${id}/edit`)} className="text-gray-400 hover:text-brand transition-colors">
+          <button onClick={() => navigate(`/projects/${id}/edit`)} className="text-gray-400 hover:text-brand transition-colors" aria-label="Edit project">
             <Edit2 size={18} />
           </button>
-          <button onClick={() => setShowDeleteConfirm(true)} className="text-gray-400 hover:text-red-400 transition-colors">
+          <button onClick={() => setShowDeleteConfirm(true)} className="text-gray-400 hover:text-red-400 transition-colors" aria-label="Delete project">
             <Trash2 size={18} />
           </button>
         </div>
@@ -176,10 +231,12 @@ export default function ProjectDetail() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-0 overflow-x-auto no-scrollbar border-b border-surface-400/30 px-5 mb-0">
+      <div className="flex gap-0 overflow-x-auto no-scrollbar border-b border-surface-400/30 px-5 mb-0" role="tablist">
         {tabs.map(({ id: tabId, label, Icon }) => (
           <button
             key={tabId}
+            role="tab"
+            aria-selected={tab === tabId}
             onClick={() => setTab(tabId)}
             className={`flex-shrink-0 flex flex-col items-center gap-1 px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider transition-colors border-b-2 ${
               tab === tabId
@@ -187,7 +244,7 @@ export default function ProjectDetail() {
                 : 'border-transparent text-gray-500 hover:text-gray-300'
             }`}
           >
-            <Icon size={14} />
+            <Icon size={14} aria-hidden />
             {label}
           </button>
         ))}
@@ -235,21 +292,12 @@ export default function ProjectDetail() {
             {/* Renovation & Holding */}
             <div className="card">
               <h3 className="text-sm font-bold text-white mb-4">Renovation & Holding</h3>
-
-              <div className="flex justify-between text-xs text-gray-400 mb-2">
-                <span className="uppercase tracking-wider">Budget Utilization</span>
-                <span className="font-bold text-white">{rehabPercent}%</span>
-              </div>
-              <div className="h-2 bg-surface-400 rounded-full overflow-hidden mb-2">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${Math.min(rehabPercent, 100)}%`,
-                    background: rehabPercent >= 90 ? 'linear-gradient(90deg,#f97316,#ef4444)' : 'linear-gradient(90deg,#f97316,#fb923c)',
-                  }}
-                />
-              </div>
-              <p className="text-xs text-gray-500 mb-4">
+              <ProgressBar
+                value={rehabPercent}
+                label="Budget Utilization"
+                showPercent
+              />
+              <p className="text-xs text-gray-500 mt-1 mb-4">
                 Estimated ${Math.max(0, project.rehab_budget - rehabSpent).toLocaleString()} remaining
               </p>
 
@@ -353,12 +401,12 @@ export default function ProjectDetail() {
             </div>
 
             {project.phases.length === 0 ? (
-              <div className="card text-center py-8">
-                <p className="text-gray-400 text-sm">No renovation phases added yet.</p>
-                <button onClick={() => navigate(`/projects/${id}/edit`)} className="mt-3 text-brand text-sm font-semibold">
-                  Edit project to add phases
-                </button>
-              </div>
+              <EmptyState
+                icon={<Wrench size={28} />}
+                title="No renovation phases"
+                description="Edit the project to add renovation phases."
+                action={{ label: 'Edit Project', onClick: () => navigate(`/projects/${id}/edit`) }}
+              />
             ) : (
               project.phases.map(phase => (
                 <div key={phase.id} className="card">
@@ -366,6 +414,7 @@ export default function ProjectDetail() {
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => handlePhaseStatusCycle(phase)}
+                        aria-label={`Phase status: ${phase.status}. Click to advance.`}
                         className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-colors ${
                           phase.status === 'completed'
                             ? 'bg-green-500 border-green-500'
@@ -435,70 +484,20 @@ export default function ProjectDetail() {
             </div>
 
             <button
-              onClick={() => setAddingExpense(true)}
+              onClick={() => setExpenseSheetOpen(true)}
               className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-surface-400 rounded-xl py-3 text-sm text-gray-400 hover:border-brand/50 hover:text-brand transition-colors"
             >
               <Plus size={16} />
               Add Expense
             </button>
 
-            {addingExpense && (
-              <div className="card space-y-3">
-                <div className="flex items-center justify-between mb-1">
-                  <h4 className="text-sm font-bold text-white">New Expense</h4>
-                  <button onClick={() => setAddingExpense(false)}><X size={16} className="text-gray-400" /></button>
-                </div>
-                <div>
-                  <label className="label">Category</label>
-                  <select
-                    value={newExpense.category}
-                    onChange={e => setNewExpense(p => ({ ...p, category: e.target.value }))}
-                    className="input-field"
-                  >
-                    {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Description</label>
-                  <input
-                    value={newExpense.description}
-                    onChange={e => setNewExpense(p => ({ ...p, description: e.target.value }))}
-                    placeholder="e.g. Kitchen cabinets"
-                    className="input-field"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="label">Amount</label>
-                    <div className="relative">
-                      <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                      <input
-                        type="number"
-                        value={newExpense.amount}
-                        onChange={e => setNewExpense(p => ({ ...p, amount: e.target.value }))}
-                        placeholder="0"
-                        className="input-field pl-8"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="label">Date</label>
-                    <input
-                      type="date"
-                      value={newExpense.date}
-                      onChange={e => setNewExpense(p => ({ ...p, date: e.target.value }))}
-                      className="input-field"
-                    />
-                  </div>
-                </div>
-                <button onClick={handleAddExpense} className="btn-primary rounded-xl py-3">Add Expense</button>
-              </div>
-            )}
-
             {project.expenses.length === 0 ? (
-              <div className="card text-center py-8">
-                <p className="text-gray-400 text-sm">No expenses logged yet.</p>
-              </div>
+              <EmptyState
+                icon={<DollarSign size={28} />}
+                title="No expenses yet"
+                description="Log your first expense to track spending."
+                action={{ label: 'Add Expense', onClick: () => setExpenseSheetOpen(true) }}
+              />
             ) : (
               <div className="space-y-2">
                 {project.expenses.map(e => (
@@ -509,8 +508,12 @@ export default function ProjectDetail() {
                     </div>
                     <div className="flex items-center gap-3 ml-3">
                       <span className="text-sm font-bold text-white">{fmt(e.amount)}</span>
-                      <button onClick={() => handleDeleteExpense(e.id)} className="text-gray-600 hover:text-red-400 transition-colors">
-                        <X size={14} />
+                      <button
+                        onClick={() => handleDeleteExpense(e.id)}
+                        aria-label="Delete expense"
+                        className="text-gray-600 hover:text-red-400 transition-colors p-1"
+                      >
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
@@ -524,62 +527,37 @@ export default function ProjectDetail() {
         {tab === 'milestones' && (
           <div className="space-y-3">
             <button
-              onClick={() => setAddingMilestone(true)}
+              onClick={() => setMilestoneSheetOpen(true)}
               className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-surface-400 rounded-xl py-3 text-sm text-gray-400 hover:border-brand/50 hover:text-brand transition-colors"
             >
               <Plus size={16} />
               Add Milestone
             </button>
 
-            {addingMilestone && (
-              <div className="card space-y-3">
-                <div className="flex items-center justify-between mb-1">
-                  <h4 className="text-sm font-bold text-white">New Milestone</h4>
-                  <button onClick={() => setAddingMilestone(false)}><X size={16} className="text-gray-400" /></button>
-                </div>
-                <div>
-                  <label className="label">Title</label>
-                  <input
-                    value={newMilestone.title}
-                    onChange={e => setNewMilestone(p => ({ ...p, title: e.target.value }))}
-                    placeholder="e.g. Permits Approved"
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="label">Due Date</label>
-                  <input
-                    type="date"
-                    value={newMilestone.due_date}
-                    onChange={e => setNewMilestone(p => ({ ...p, due_date: e.target.value }))}
-                    className="input-field"
-                  />
-                </div>
-                <button onClick={handleAddMilestone} className="btn-primary rounded-xl py-3">Add Milestone</button>
-              </div>
-            )}
-
             {project.milestones.length === 0 ? (
-              <div className="card text-center py-8">
-                <p className="text-gray-400 text-sm">No milestones yet. Add key dates and checkpoints.</p>
-              </div>
+              <EmptyState
+                icon={<Clock size={28} />}
+                title="No milestones yet"
+                description="Add key dates and checkpoints for this project."
+                action={{ label: 'Add Milestone', onClick: () => setMilestoneSheetOpen(true) }}
+              />
             ) : (
               <div className="relative">
-                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-surface-400/50" />
+                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-surface-400/50" aria-hidden />
                 <div className="space-y-3 pl-10">
                   {project.milestones.map(m => (
                     <div key={m.id} className="relative">
-                      <div
-                        className={`absolute -left-[30px] top-3 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                      <button
+                        onClick={() => handleToggleMilestone(m)}
+                        aria-label={m.completed ? 'Mark incomplete' : 'Mark complete'}
+                        className={`absolute -left-[30px] top-3 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
                           m.completed
                             ? 'bg-green-500 border-green-500'
-                            : 'bg-surface-700 border-brand'
+                            : 'bg-surface-700 border-brand hover:bg-brand/20'
                         }`}
-                        onClick={() => handleToggleMilestone(m)}
-                        style={{ cursor: 'pointer' }}
                       >
                         {m.completed ? <Check size={10} className="text-white" /> : null}
-                      </div>
+                      </button>
                       <div className={`card flex items-start justify-between ${m.completed ? 'opacity-60' : ''}`}>
                         <div>
                           <p className={`text-sm font-semibold ${m.completed ? 'line-through text-gray-500' : 'text-white'}`}>
@@ -593,8 +571,12 @@ export default function ProjectDetail() {
                             </p>
                           )}
                         </div>
-                        <button onClick={() => handleDeleteMilestone(m.id)} className="text-gray-600 hover:text-red-400 ml-2 flex-shrink-0">
-                          <X size={14} />
+                        <button
+                          onClick={() => handleDeleteMilestone(m.id)}
+                          aria-label="Delete milestone"
+                          className="text-gray-600 hover:text-red-400 ml-2 flex-shrink-0 p-1 transition-colors"
+                        >
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
@@ -608,6 +590,13 @@ export default function ProjectDetail() {
         {/* ===== VENDORS ===== */}
         {tab === 'vendors' && (
           <div className="space-y-3">
+            {project.vendors.length === 0 && (
+              <EmptyState
+                icon={<Users size={28} />}
+                title="No vendors attached"
+                description="Attach vendors to track who's working on this project."
+              />
+            )}
             {project.vendors.map(v => (
               <div key={v.id} className="card">
                 <div className="flex items-start justify-between">
@@ -622,9 +611,10 @@ export default function ProjectDetail() {
                   </div>
                   <button
                     onClick={() => handleDetachVendor(v.vendor_id)}
-                    className="text-gray-600 hover:text-red-400 transition-colors"
+                    aria-label={`Remove ${v.vendor_name}`}
+                    className="text-gray-600 hover:text-red-400 transition-colors p-1"
                   >
-                    <X size={16} />
+                    <Trash2 size={16} />
                   </button>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
@@ -679,24 +669,75 @@ export default function ProjectDetail() {
       </div>
 
       {/* Delete Confirm Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 px-5 pb-8">
-          <div className="bg-surface-700 rounded-3xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-bold text-white mb-2">Delete Project?</h3>
-            <p className="text-sm text-gray-400 mb-6">
-              This will permanently delete "{project.name || project.address}" and all its data.
-            </p>
-            <div className="space-y-3">
-              <button onClick={handleDeleteProject} className="w-full py-4 rounded-xl bg-red-500 text-white font-bold">
-                Delete Project
-              </button>
-              <button onClick={() => setShowDeleteConfirm(false)} className="w-full py-4 rounded-xl bg-surface-500 text-white font-semibold">
-                Cancel
-              </button>
-            </div>
+      <Modal
+        open={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        title="Delete Project?"
+        description={`This will permanently delete "${project.name || project.address}" and all its data. This cannot be undone.`}
+        confirmLabel="Delete Project"
+        confirmVariant="danger"
+        onConfirm={handleDeleteProject}
+        confirmLoading={deleteLoading}
+      />
+
+      {/* Add Expense Sheet */}
+      <Sheet open={expenseSheetOpen} onClose={() => setExpenseSheetOpen(false)} title="Log Expense">
+        <div className="px-5 py-4 space-y-4 pb-8">
+          <Select
+            label="Category"
+            value={newExpense.category}
+            onChange={e => setNewExpense(p => ({ ...p, category: e.target.value }))}
+            options={EXPENSE_CATEGORIES.map(c => ({ value: c.value, label: c.label }))}
+          />
+          <Input
+            label="Description"
+            value={newExpense.description}
+            onChange={e => setNewExpense(p => ({ ...p, description: e.target.value }))}
+            placeholder="e.g. Kitchen cabinets"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Amount"
+              type="number"
+              prefix="$"
+              value={newExpense.amount}
+              onChange={e => setNewExpense(p => ({ ...p, amount: e.target.value }))}
+              placeholder="0"
+            />
+            <Input
+              label="Date"
+              type="date"
+              value={newExpense.date}
+              onChange={e => setNewExpense(p => ({ ...p, date: e.target.value }))}
+            />
           </div>
+          <Button fullWidth size="lg" loading={savingExpense} onClick={handleAddExpense}>
+            Log Expense
+          </Button>
         </div>
-      )}
+      </Sheet>
+
+      {/* Add Milestone Sheet */}
+      <Sheet open={milestoneSheetOpen} onClose={() => setMilestoneSheetOpen(false)} title="Add Milestone">
+        <div className="px-5 py-4 space-y-4 pb-8">
+          <Input
+            label="Title"
+            value={newMilestone.title}
+            onChange={e => setNewMilestone(p => ({ ...p, title: e.target.value }))}
+            placeholder="e.g. Permits Approved"
+            autoFocus
+          />
+          <Input
+            label="Due Date"
+            type="date"
+            value={newMilestone.due_date}
+            onChange={e => setNewMilestone(p => ({ ...p, due_date: e.target.value }))}
+          />
+          <Button fullWidth size="lg" loading={savingMilestone} onClick={handleAddMilestone}>
+            Add Milestone
+          </Button>
+        </div>
+      </Sheet>
     </div>
   );
 }

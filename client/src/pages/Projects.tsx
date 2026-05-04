@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, SlidersHorizontal, ChevronLeft } from 'lucide-react';
+import { Plus, Search, SlidersHorizontal } from 'lucide-react';
 import ProjectCard from '../components/ProjectCard';
+import { SkeletonList, EmptyState, useToast } from '../components/ui';
 import { api } from '../lib/api';
 import type { Project, ProjectStatus } from '../types';
 
@@ -15,16 +16,22 @@ const STATUS_FILTERS: { label: string; value: ProjectStatus | 'all' }[] = [
 
 export default function Projects() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ProjectStatus | 'all'>('all');
 
   useEffect(() => {
-    api.projects.list().then((data) => {
-      setProjects(data as Project[]);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    api.projects.list()
+      .then((data) => {
+        setProjects(data as Project[]);
+        setLoading(false);
+      })
+      .catch(() => {
+        toast.error('Failed to load projects');
+        setLoading(false);
+      });
   }, []);
 
   const filtered = projects.filter(p => {
@@ -43,6 +50,7 @@ export default function Projects() {
           onClick={() => navigate('/projects/new')}
           className="w-9 h-9 rounded-full flex items-center justify-center"
           style={{ background: 'linear-gradient(135deg,#f97316,#ea580c)' }}
+          aria-label="New project"
         >
           <Plus size={18} className="text-white" />
         </button>
@@ -51,22 +59,24 @@ export default function Projects() {
       {/* Search */}
       <div className="px-5 mb-4">
         <div className="relative">
-          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" aria-hidden />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by address, city..."
             className="input-field pl-10"
+            aria-label="Search projects"
           />
         </div>
       </div>
 
       {/* Status filter chips */}
-      <div className="flex gap-2 px-5 mb-5 overflow-x-auto no-scrollbar">
+      <div className="flex gap-2 px-5 mb-5 overflow-x-auto no-scrollbar" role="group" aria-label="Filter by status">
         {STATUS_FILTERS.map(({ label, value }) => (
           <button
             key={value}
             onClick={() => setFilter(value)}
+            aria-pressed={filter === value}
             className={`flex-shrink-0 text-xs font-bold px-4 py-2 rounded-full border transition-colors ${
               filter === value
                 ? 'bg-brand border-brand text-white'
@@ -80,28 +90,22 @@ export default function Projects() {
 
       <div className="px-5 pb-8">
         {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="card animate-pulse h-32" />
-            ))}
-          </div>
+          <SkeletonList count={4} />
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-surface-700 flex items-center justify-center mb-4">
-              <SlidersHorizontal size={28} className="text-gray-500" />
-            </div>
-            <p className="text-gray-400 text-sm">
-              {search || filter !== 'all' ? 'No projects match your filters.' : 'No projects yet.'}
-            </p>
-            {!search && filter === 'all' && (
-              <button
-                onClick={() => navigate('/projects/new')}
-                className="mt-4 btn-primary w-auto px-8 py-3 rounded-xl text-sm"
-              >
-                Add Your First Project
-              </button>
-            )}
-          </div>
+          search || filter !== 'all' ? (
+            <EmptyState
+              icon={<SlidersHorizontal size={28} />}
+              title="No matching projects"
+              description="Try adjusting your filters or search query."
+            />
+          ) : (
+            <EmptyState
+              icon={<SlidersHorizontal size={28} />}
+              title="No projects yet"
+              description="Start tracking your first flip project."
+              action={{ label: 'Add Your First Project', onClick: () => navigate('/projects/new') }}
+            />
+          )
         ) : (
           <div className="space-y-3">
             <p className="text-xs text-gray-500 uppercase tracking-wider">

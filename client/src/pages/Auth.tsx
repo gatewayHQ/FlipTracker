@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { TrendingUp, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { Button, Input } from '../components/ui';
 
 export default function Auth() {
   const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
@@ -70,62 +71,51 @@ export default function Auth() {
             </div>
           )}
 
-          <div>
-            <label className="label">Email</label>
-            <div className="relative">
-              <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="input-field pl-9"
-                required
-                autoComplete="email"
-              />
-            </div>
-          </div>
+          <Input
+            label="Email"
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            leftIcon={<Mail size={15} />}
+            required
+            autoComplete="email"
+          />
 
           {mode !== 'reset' && (
-            <div>
-              <label className="label">Password</label>
-              <div className="relative">
-                <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder={mode === 'signup' ? 'Min 6 characters' : '••••••••'}
-                  className="input-field pl-9 pr-10"
-                  required
-                  minLength={6}
-                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                />
+            <Input
+              label="Password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder={mode === 'signup' ? 'Min 6 characters' : '••••••••'}
+              leftIcon={<Lock size={15} />}
+              rightIcon={
                 <button
                   type="button"
                   onClick={() => setShowPassword(p => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  className="text-gray-500 hover:text-gray-300 transition-colors"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
-              </div>
-            </div>
+              }
+              required
+              minLength={6}
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            />
           )}
 
-          <button type="submit" disabled={loading} className="btn-primary rounded-xl py-4 mt-2">
-            {loading
-              ? 'Please wait...'
-              : mode === 'login' ? 'Sign In'
-              : mode === 'signup' ? 'Create Account'
-              : 'Send Reset Link'}
-          </button>
+          <Button type="submit" loading={loading} fullWidth size="lg" className="mt-2">
+            {mode === 'login' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Send Reset Link'}
+          </Button>
         </form>
 
         {/* Footer links */}
         <div className="mt-5 space-y-2 text-center">
           {mode === 'login' && (
             <>
-              <button onClick={() => setMode('reset')} className="text-xs text-gray-400 hover:text-brand block w-full">
+              <button onClick={() => setMode('reset')} className="text-xs text-gray-400 hover:text-brand block w-full transition-colors">
                 Forgot password?
               </button>
               <button onClick={() => setMode('signup')} className="text-sm text-brand font-semibold block w-full">

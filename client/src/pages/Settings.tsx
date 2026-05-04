@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { User, Bell, Shield, HelpCircle, ChevronRight, Moon, DollarSign, TrendingUp, Building2, LogOut } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
 
 interface SettingRow {
   icon: any;
@@ -11,11 +12,10 @@ interface SettingRow {
 }
 
 export default function Settings() {
+  const { user, signOut } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [darkMode] = useState(true);
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [currency] = useState('USD');
   const [capitalGoal, setCapitalGoal] = useState('');
 
   const profileRows: SettingRow[] = [
@@ -42,16 +42,12 @@ export default function Settings() {
             </div>
             <div>
               <p className="font-bold text-white">{name || 'Investor'}</p>
-              <p className="text-xs text-gray-400">{email || 'No email set'}</p>
+              <p className="text-xs text-gray-400">{user?.email}</p>
             </div>
           </div>
           <div>
-            <label className="label">Your Name</label>
+            <label className="label">Display Name</label>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="Jane Investor" className="input-field" />
-          </div>
-          <div>
-            <label className="label">Email</label>
-            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="jane@example.com" className="input-field" type="email" />
           </div>
         </div>
 
@@ -134,6 +130,14 @@ export default function Settings() {
           <p className="text-xs text-gray-600">Real Estate Investment Tracker</p>
           <p className="text-xs text-gray-600 mt-1">Built for serious investors</p>
         </div>
+
+        <button
+          onClick={signOut}
+          className="w-full flex items-center justify-center gap-2 py-4 rounded-xl border border-red-500/30 text-red-400 font-semibold text-sm hover:bg-red-500/10 transition-colors"
+        >
+          <LogOut size={16} />
+          Sign Out
+        </button>
       </div>
     </div>
   );

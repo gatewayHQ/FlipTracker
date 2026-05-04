@@ -119,6 +119,7 @@ export default function AddProject() {
     const payload = {
       ...form,
       name: form.name || form.address,
+      status: form.status as import('../types').ProjectStatus,
       purchase_price: parseFloat(form.purchase_price) || 0,
       legal_fees: parseFloat(form.legal_fees) || 0,
       inspection_cost: parseFloat(form.inspection_cost) || 0,

@@ -2,7 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import { initializeSchema } from './schema';
 
-const DB_PATH = path.join(__dirname, '../../data/flipfolio.db');
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../data/flipfolio.db');
 
 let _db: BetterSqlite3.Database | null = null;
 

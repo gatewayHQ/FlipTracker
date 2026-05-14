@@ -94,6 +94,32 @@ export const api = {
     detachFromProject: (vendorId: string, projectId: string) =>
       req('DELETE', `/vendors/${vendorId}/projects/${projectId}`),
   },
+  tasks: {
+    create: (projectId: string, phaseId: string, data: unknown) =>
+      req('POST', `/projects/${projectId}/phases/${phaseId}/tasks`, data),
+    update: (projectId: string, phaseId: string, taskId: string, data: unknown) =>
+      req('PUT', `/projects/${projectId}/phases/${phaseId}/tasks/${taskId}`, data),
+    delete: (projectId: string, phaseId: string, taskId: string) =>
+      req('DELETE', `/projects/${projectId}/phases/${phaseId}/tasks/${taskId}`),
+  },
+  comps: {
+    create: (projectId: string, data: unknown) => req('POST', `/projects/${projectId}/comps`, data),
+    delete: (projectId: string, compId: string) => req('DELETE', `/projects/${projectId}/comps/${compId}`),
+  },
+  notes: {
+    create: (projectId: string, data: unknown) => req('POST', `/projects/${projectId}/notes`, data),
+    delete: (projectId: string, noteId: string) => req('DELETE', `/projects/${projectId}/notes/${noteId}`),
+  },
+  documents: {
+    create: (projectId: string, data: unknown) => req('POST', `/projects/${projectId}/documents`, data),
+    delete: (projectId: string, docId: string) => req('DELETE', `/projects/${projectId}/documents/${docId}`),
+  },
+  analyzer: {
+    list: () => req('GET', '/analyzer'),
+    create: (data: unknown) => req('POST', '/analyzer', data),
+    update: (id: string, data: unknown) => req('PUT', `/analyzer/${id}`, data),
+    delete: (id: string) => req('DELETE', `/analyzer/${id}`),
+  },
 };
 
 export function fmt(amount: number): string {

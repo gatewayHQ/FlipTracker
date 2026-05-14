@@ -3,13 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ChevronLeft, Edit2, Trash2, Plus, Check, Clock, DollarSign,
   Wrench, Users, FileText, X, MapPin, CreditCard, AlertTriangle, Pencil,
+  FolderOpen, BarChart2, Link2,
 } from 'lucide-react';
 import DonutChart from '../components/DonutChart';
 import { api, fmt, fmtFull, fmtDate, fmtDateShort, daysOverdue } from '../lib/api';
 import type { ProjectDetail as PD, RenovationPhase, Milestone, Vendor, Expense, Loan } from '../types';
 import { STATUS_COLORS, EXPENSE_CATEGORIES, RENOVATION_PHASES } from '../types';
 
-type Tab = 'overview' | 'phases' | 'expenses' | 'milestones' | 'vendors' | 'financing';
+type Tab = 'overview' | 'phases' | 'expenses' | 'milestones' | 'vendors' | 'financing' | 'records' | 'pnl';
 
 const PHASE_STATUS_COLORS: Record<string, string> = {
   pending: 'bg-surface-400 text-gray-400',
@@ -51,6 +52,21 @@ export default function ProjectDetail() {
   // Vendor attach state
   const [attachForm, setAttachForm] = useState({ contracted_amount: '', phase_name: '', notes: '' });
   const [attachingVendorId, setAttachingVendorId] = useState<string | null>(null);
+
+  // Task state
+  const [taskInputs, setTaskInputs] = useState<Record<string, string>>({});
+
+  // Comp state
+  const [compForm, setCompForm] = useState({ address: '', sale_price: '', sqft: '', beds: '', baths: '', sale_date: '', source: '', notes: '' });
+  const [addingComp, setAddingComp] = useState(false);
+
+  // Note state
+  const [newNote, setNewNote] = useState('');
+  const [addingNote, setAddingNote] = useState(false);
+
+  // Document state
+  const [docForm, setDocForm] = useState({ name: '', type: 'contract', url: '' });
+  const [addingDoc, setAddingDoc] = useState(false);
 
   const loadProject = () => {
     if (!id) return;
@@ -209,6 +225,73 @@ export default function ProjectDetail() {
     loadProject();
   };
 
+  // ---- Tasks ----
+  const handleToggleTask = async (phaseId: string, taskId: string, completed: number) => {
+    await api.tasks.update(id!, phaseId, taskId, { completed: completed ? 0 : 1 });
+    loadProject();
+  };
+
+  const handleAddTask = async (phaseId: string) => {
+    const title = (taskInputs[phaseId] || '').trim();
+    if (!title) return;
+    await api.tasks.create(id!, phaseId, { title });
+    setTaskInputs(prev => ({ ...prev, [phaseId]: '' }));
+    loadProject();
+  };
+
+  const handleDeleteTask = async (phaseId: string, taskId: string) => {
+    await api.tasks.delete(id!, phaseId, taskId);
+    loadProject();
+  };
+
+  // ---- Comps ----
+  const handleAddComp = async () => {
+    if (!compForm.address.trim()) return;
+    await api.comps.create(id!, {
+      ...compForm,
+      sale_price: parseFloat(compForm.sale_price) || 0,
+      sqft: parseFloat(compForm.sqft) || 0,
+      beds: parseInt(compForm.beds) || 0,
+      baths: parseFloat(compForm.baths) || 0,
+    });
+    setCompForm({ address: '', sale_price: '', sqft: '', beds: '', baths: '', sale_date: '', source: '', notes: '' });
+    setAddingComp(false);
+    loadProject();
+  };
+
+  const handleDeleteComp = async (compId: string) => {
+    await api.comps.delete(id!, compId);
+    loadProject();
+  };
+
+  // ---- Notes ----
+  const handleAddNote = async () => {
+    if (!newNote.trim()) return;
+    await api.notes.create(id!, { note: newNote });
+    setNewNote('');
+    setAddingNote(false);
+    loadProject();
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    await api.notes.delete(id!, noteId);
+    loadProject();
+  };
+
+  // ---- Documents ----
+  const handleAddDoc = async () => {
+    if (!docForm.name.trim() || !docForm.url.trim()) return;
+    await api.documents.create(id!, docForm);
+    setDocForm({ name: '', type: 'contract', url: '' });
+    setAddingDoc(false);
+    loadProject();
+  };
+
+  const handleDeleteDoc = async (docId: string) => {
+    await api.documents.delete(id!, docId);
+    loadProject();
+  };
+
   if (loading) {
     return (
       <div className="min-h-full bg-surface-900 flex items-center justify-center">
@@ -247,6 +330,8 @@ export default function ProjectDetail() {
     { id: 'milestones', label: 'Timeline', Icon: Clock },
     { id: 'vendors', label: 'Vendors', Icon: Users },
     { id: 'financing', label: 'Financing', Icon: CreditCard },
+    { id: 'records', label: 'Records', Icon: FolderOpen },
+    { id: 'pnl', label: 'P&L', Icon: BarChart2 },
   ];
 
   const rehabStatus = rehabPercent > 100 ? 'over_budget' : rehabPercent > 90 ? 'at_risk' : 'on_track';
@@ -408,6 +493,37 @@ export default function ProjectDetail() {
               </div>
             </div>
 
+            {/* Cost to Complete */}
+            {project.phases.some(p => p.status !== 'completed') && (
+              <div className="card">
+                <div className="flex items-center gap-2 mb-3">
+                  <Wrench size={16} className="text-brand" />
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-brand">Cost to Complete</h3>
+                </div>
+                <div className="space-y-2">
+                  {project.phases.filter(p => p.status !== 'completed').map(p => {
+                    const remaining = Math.max((p.budget || 0) - (p.actual_cost || 0), 0);
+                    return (
+                      <div key={p.id} className="flex justify-between items-center py-1.5 border-b border-surface-400/20 last:border-0">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${p.status === 'in_progress' ? 'bg-brand' : 'bg-surface-300'}`} />
+                          <span className="text-sm text-gray-300">{p.phase_name}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${PHASE_STATUS_COLORS[p.status]}`}>{p.status.replace('_', ' ')}</span>
+                        </div>
+                        <span className="text-sm font-bold text-white">{remaining > 0 ? fmtFull(remaining) : '—'}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="flex justify-between items-center pt-2">
+                    <span className="text-sm font-bold text-white">Total Remaining</span>
+                    <span className="text-base font-bold text-brand">
+                      {fmtFull(project.phases.filter(p => p.status !== 'completed').reduce((s, p) => s + Math.max((p.budget || 0) - (p.actual_cost || 0), 0), 0))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {project.milestones.filter(m => !m.completed).slice(0, 3).length > 0 && (
               <div className="card">
                 <div className="flex items-center justify-between mb-3">
@@ -568,6 +684,44 @@ export default function ProjectDetail() {
                     )}
 
                     {phase.notes && <p className="text-xs text-gray-500 mt-2">{phase.notes}</p>}
+
+                    {/* Task Checklist */}
+                    <div className="mt-3 pt-3 border-t border-surface-400/20">
+                      <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2 font-semibold">
+                        Tasks {phase.tasks.length > 0 && `· ${phase.tasks.filter(t => t.completed).length}/${phase.tasks.length}`}
+                      </p>
+                      {phase.tasks.map(task => (
+                        <div key={task.id} className="flex items-center gap-2 py-1">
+                          <button
+                            onClick={() => handleToggleTask(phase.id, task.id, task.completed)}
+                            className={`w-4 h-4 rounded flex-shrink-0 border flex items-center justify-center transition-colors ${
+                              task.completed ? 'bg-green-500 border-green-500' : 'border-surface-300 bg-transparent'
+                            }`}
+                          >
+                            {task.completed ? <Check size={10} className="text-white" /> : null}
+                          </button>
+                          <span className={`text-xs flex-1 ${task.completed ? 'line-through text-gray-500' : 'text-gray-300'}`}>{task.title}</span>
+                          <button onClick={() => handleDeleteTask(phase.id, task.id)} className="text-gray-600 hover:text-red-400 transition-colors">
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                      <div className="flex gap-2 mt-2">
+                        <input
+                          value={taskInputs[phase.id] || ''}
+                          onChange={e => setTaskInputs(prev => ({ ...prev, [phase.id]: e.target.value }))}
+                          onKeyDown={e => e.key === 'Enter' && handleAddTask(phase.id)}
+                          placeholder="Add task..."
+                          className="flex-1 bg-surface-600 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 outline-none focus:ring-1 focus:ring-brand/50"
+                        />
+                        <button
+                          onClick={() => handleAddTask(phase.id)}
+                          className="px-3 py-1.5 bg-brand/20 text-brand rounded-lg text-xs font-semibold hover:bg-brand/30 transition-colors"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 );
               })
@@ -970,6 +1124,329 @@ export default function ProjectDetail() {
             )}
           </div>
         )}
+
+        {/* ===== RECORDS ===== */}
+        {tab === 'records' && (
+          <div className="space-y-5">
+            {/* Comparable Sales */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Comparable Sales</h3>
+                <button onClick={() => setAddingComp(v => !v)} className="text-brand text-xs font-semibold flex items-center gap-1">
+                  <Plus size={13} /> Add Comp
+                </button>
+              </div>
+
+              {addingComp && (
+                <div className="card space-y-3 mb-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-white">New Comp</h4>
+                    <button onClick={() => setAddingComp(false)}><X size={16} className="text-gray-400" /></button>
+                  </div>
+                  <div>
+                    <label className="label">Address</label>
+                    <input value={compForm.address} onChange={e => setCompForm(p => ({ ...p, address: e.target.value }))} placeholder="123 Sold St, City, ST" className="input-field" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label">Sale Price</label>
+                      <div className="relative">
+                        <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                        <input type="number" value={compForm.sale_price} onChange={e => setCompForm(p => ({ ...p, sale_price: e.target.value }))} placeholder="0" className="input-field pl-8" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="label">Sq Ft</label>
+                      <input type="number" value={compForm.sqft} onChange={e => setCompForm(p => ({ ...p, sqft: e.target.value }))} placeholder="0" className="input-field" />
+                    </div>
+                    <div>
+                      <label className="label">Beds</label>
+                      <input type="number" value={compForm.beds} onChange={e => setCompForm(p => ({ ...p, beds: e.target.value }))} placeholder="3" className="input-field" />
+                    </div>
+                    <div>
+                      <label className="label">Baths</label>
+                      <input type="number" value={compForm.baths} onChange={e => setCompForm(p => ({ ...p, baths: e.target.value }))} placeholder="2" className="input-field" step="0.5" />
+                    </div>
+                    <div>
+                      <label className="label">Sale Date</label>
+                      <input type="date" value={compForm.sale_date} onChange={e => setCompForm(p => ({ ...p, sale_date: e.target.value }))} className="input-field" />
+                    </div>
+                    <div>
+                      <label className="label">Source</label>
+                      <input value={compForm.source} onChange={e => setCompForm(p => ({ ...p, source: e.target.value }))} placeholder="MLS, Zillow..." className="input-field" />
+                    </div>
+                  </div>
+                  <button onClick={handleAddComp} className="btn-primary rounded-xl py-3">Save Comp</button>
+                </div>
+              )}
+
+              {(project.comps || []).length === 0 ? (
+                <div className="card text-center py-6">
+                  <p className="text-gray-400 text-sm">No comps added yet.</p>
+                  <p className="text-xs text-gray-500 mt-1">Track nearby sold properties to validate your ARV.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {(project.comps || []).map(comp => {
+                    const ppsf = comp.sqft > 0 ? comp.sale_price / comp.sqft : 0;
+                    return (
+                      <div key={comp.id} className="card">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{comp.address}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {comp.beds > 0 && `${comp.beds}bd `}{comp.baths > 0 && `${comp.baths}ba `}{comp.sqft > 0 && `· ${comp.sqft.toLocaleString()} sqft`}
+                              {comp.sale_date && ` · ${fmtDateShort(comp.sale_date)}`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                            <div className="text-right">
+                              <div className="text-sm font-bold text-white">{fmt(comp.sale_price)}</div>
+                              {ppsf > 0 && <div className="text-[10px] text-gray-500">${Math.round(ppsf)}/sqft</div>}
+                            </div>
+                            <button onClick={() => handleDeleteComp(comp.id)} className="text-gray-600 hover:text-red-400 transition-colors">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        {comp.source && <p className="text-[10px] text-gray-500 mt-1">Source: {comp.source}</p>}
+                      </div>
+                    );
+                  })}
+                  {(project.comps || []).length > 1 && (
+                    <div className="card bg-surface-600/50">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">Avg Sale Price</span>
+                        <span className="font-bold text-white">{fmt((project.comps || []).reduce((s, c) => s + c.sale_price, 0) / (project.comps || []).length)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Activity Log */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Activity Log</h3>
+                <button onClick={() => setAddingNote(v => !v)} className="text-brand text-xs font-semibold flex items-center gap-1">
+                  <Plus size={13} /> Add Note
+                </button>
+              </div>
+
+              {addingNote && (
+                <div className="card space-y-3 mb-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-white">New Entry</h4>
+                    <button onClick={() => setAddingNote(false)}><X size={16} className="text-gray-400" /></button>
+                  </div>
+                  <textarea
+                    value={newNote}
+                    onChange={e => setNewNote(e.target.value)}
+                    placeholder="What happened today? Inspections, contractor visits, decisions..."
+                    rows={3}
+                    className="w-full bg-surface-600 border border-surface-400/30 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 outline-none focus:ring-2 focus:ring-brand/40 resize-none"
+                  />
+                  <button onClick={handleAddNote} className="btn-primary rounded-xl py-3">Save Entry</button>
+                </div>
+              )}
+
+              {(project.notes || []).length === 0 ? (
+                <div className="card text-center py-6">
+                  <p className="text-gray-400 text-sm">No activity logged yet.</p>
+                  <p className="text-xs text-gray-500 mt-1">Keep a diary of site visits, decisions, and updates.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {(project.notes || []).map(note => (
+                    <div key={note.id} className="card">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-500 mb-1">{fmtDate(note.created_at?.slice(0, 10))}</p>
+                          <p className="text-sm text-gray-200 whitespace-pre-wrap">{note.note}</p>
+                        </div>
+                        <button onClick={() => handleDeleteNote(note.id)} className="text-gray-600 hover:text-red-400 transition-colors flex-shrink-0 mt-1">
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Documents */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Documents</h3>
+                <button onClick={() => setAddingDoc(v => !v)} className="text-brand text-xs font-semibold flex items-center gap-1">
+                  <Plus size={13} /> Add Doc
+                </button>
+              </div>
+
+              {addingDoc && (
+                <div className="card space-y-3 mb-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-white">New Document</h4>
+                    <button onClick={() => setAddingDoc(false)}><X size={16} className="text-gray-400" /></button>
+                  </div>
+                  <div>
+                    <label className="label">Document Name</label>
+                    <input value={docForm.name} onChange={e => setDocForm(p => ({ ...p, name: e.target.value }))} placeholder="Purchase Agreement, Permit #123..." className="input-field" />
+                  </div>
+                  <div>
+                    <label className="label">Type</label>
+                    <select value={docForm.type} onChange={e => setDocForm(p => ({ ...p, type: e.target.value }))} className="input-field">
+                      {['contract', 'permit', 'inspection', 'insurance', 'receipt', 'photo', 'other'].map(t => (
+                        <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">URL / Link</label>
+                    <input value={docForm.url} onChange={e => setDocForm(p => ({ ...p, url: e.target.value }))} placeholder="https://drive.google.com/..." className="input-field" />
+                  </div>
+                  <button onClick={handleAddDoc} className="btn-primary rounded-xl py-3">Save Document</button>
+                </div>
+              )}
+
+              {(project.documents || []).length === 0 ? (
+                <div className="card text-center py-6">
+                  <p className="text-gray-400 text-sm">No documents linked yet.</p>
+                  <p className="text-xs text-gray-500 mt-1">Link contracts, permits, photos, and receipts.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {(project.documents || []).map(doc => (
+                    <div key={doc.id} className="card flex items-center justify-between py-3">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-surface-600 flex items-center justify-center flex-shrink-0">
+                          <Link2 size={14} className="text-brand" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{doc.name}</p>
+                          <p className="text-xs text-gray-500 capitalize">{doc.type}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                        <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-brand text-xs font-semibold">Open</a>
+                        <button onClick={() => handleDeleteDoc(doc.id)} className="text-gray-600 hover:text-red-400 transition-colors">
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ===== P&L STATEMENT ===== */}
+        {tab === 'pnl' && (() => {
+          const salePrice = project.actual_sale_price > 0 ? project.actual_sale_price : project.estimated_sale_price;
+          const agentCommission = salePrice * 0.06;
+          const sellerClosing = salePrice * 0.02;
+          const netProceeds = salePrice - agentCommission - sellerClosing;
+          const totalAcquisition = project.purchase_price + project.legal_fees + project.inspection_cost + project.closing_costs;
+          const totalRehab = project.labor_cost + project.materials_cost;
+          const trackedExpenses = project.expenses.reduce((s, e) => s + e.amount, 0);
+          const holdingTotal = project.holding_costs_monthly * 6;
+          const loanCosts = (project.loans || []).reduce((s, l) => {
+            const points = (l.points / 100) * l.loan_amount;
+            const interest = l.monthly_payment > 0 ? l.monthly_payment * l.term_months - l.loan_amount : 0;
+            return s + points + Math.max(interest, 0);
+          }, 0);
+          const totalCosts = totalAcquisition + totalRehab + holdingTotal + loanCosts;
+          const netProfit = netProceeds - totalCosts;
+          const roi = totalCosts > 0 ? (netProfit / totalCosts) * 100 : 0;
+
+          const Row = ({ label, value, bold, color }: { label: string; value: number; bold?: boolean; color?: string }) => (
+            <div className={`flex justify-between items-center py-2 border-b border-surface-400/20 last:border-0 ${bold ? 'border-t-0 pt-2' : ''}`}>
+              <span className={`text-sm ${bold ? 'font-bold text-white' : 'text-gray-300'}`}>{label}</span>
+              <span className={`text-sm font-bold ${color || (value < 0 ? 'text-red-400' : bold ? 'text-white' : 'text-gray-200')}`}>
+                {value < 0 ? '-' : ''}{fmtFull(Math.abs(value))}
+              </span>
+            </div>
+          );
+
+          return (
+            <div className="space-y-4">
+              <div className="card">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest">
+                    {project.actual_sale_price > 0 ? 'Final P&L (Actual Sale)' : 'Projected P&L (Estimated)'}
+                  </p>
+                </div>
+                <div className={`text-2xl font-bold mb-1 ${netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {netProfit >= 0 ? '+' : ''}{fmtFull(netProfit)}
+                </div>
+                <div className="text-xs text-gray-500">ROI: <span className={`font-bold ${roi >= 0 ? 'text-brand' : 'text-red-400'}`}>{roi.toFixed(1)}%</span></div>
+              </div>
+
+              <div className="card">
+                <h4 className="text-xs font-bold uppercase tracking-widest text-green-400 mb-3">Revenue</h4>
+                <div className="space-y-0">
+                  <Row label={project.actual_sale_price > 0 ? 'Actual Sale Price' : 'Estimated Sale Price'} value={salePrice} />
+                  <Row label="Agent Commission (6%)" value={-agentCommission} />
+                  <Row label="Seller Closing Costs (2%)" value={-sellerClosing} />
+                  <Row label="Net Proceeds" value={netProceeds} bold color="text-green-400" />
+                </div>
+              </div>
+
+              <div className="card">
+                <h4 className="text-xs font-bold uppercase tracking-widest text-red-400 mb-3">Costs</h4>
+                <div className="space-y-0">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2 mt-1">Acquisition</p>
+                  <Row label="Purchase Price" value={-project.purchase_price} />
+                  <Row label="Legal & Title" value={-project.legal_fees} />
+                  <Row label="Inspection" value={-project.inspection_cost} />
+                  <Row label="Buyer Closing Costs" value={-project.closing_costs} />
+                  <Row label="Total Acquisition" value={-totalAcquisition} bold />
+
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2 mt-4">Renovation</p>
+                  <Row label="Labor Costs" value={-project.labor_cost} />
+                  <Row label="Materials Costs" value={-project.materials_cost} />
+                  {trackedExpenses > 0 && <Row label="Tracked Expenses" value={-trackedExpenses} />}
+                  <Row label="Total Renovation" value={-totalRehab} bold />
+
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2 mt-4">Carrying Costs</p>
+                  <Row label="Holding Costs (est. 6mo)" value={-holdingTotal} />
+                  {loanCosts > 0 && <Row label="Loan Points & Interest" value={-loanCosts} />}
+                  <Row label="Total Carrying" value={-(holdingTotal + loanCosts)} bold />
+
+                  <div className="border-t border-surface-400/40 mt-3 pt-3">
+                    <Row label="Total Costs" value={-totalCosts} bold color="text-red-400" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-bold text-white">Net Profit</span>
+                  <span className={`text-xl font-bold ${netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {netProfit >= 0 ? '+' : ''}{fmtFull(netProfit)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-xs text-gray-500">Return on Investment</span>
+                  <span className={`text-sm font-bold ${roi >= 0 ? 'text-brand' : 'text-red-400'}`}>{roi.toFixed(1)}%</span>
+                </div>
+                <div className="flex justify-between items-center mt-1">
+                  <span className="text-xs text-gray-500">Cash-on-Cash (if financed)</span>
+                  {(project.loans || []).length > 0 ? (
+                    <span className="text-xs text-gray-400">
+                      {fmtFull(netProceeds - totalCosts)} / {fmtFull(totalAcquisition + totalRehab - (project.loans || []).reduce((s, l) => s + l.loan_amount, 0))}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-500">No loans tracked</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
 
       {/* Delete Confirm Modal */}

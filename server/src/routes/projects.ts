@@ -63,13 +63,26 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
     const project = rows[0] as any;
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    const [phases, expenses, milestones, projectVendors, loans] = await Promise.all([
+    const [phases, expenses, milestones, projectVendors, loans, comps, notes, documents] = await Promise.all([
       sql`SELECT * FROM renovation_phases WHERE project_id = ${req.params.id} ORDER BY created_at`,
       sql`SELECT * FROM expenses WHERE project_id = ${req.params.id} ORDER BY date DESC`,
       sql`SELECT * FROM milestones WHERE project_id = ${req.params.id} ORDER BY due_date`,
       sql`SELECT pv.*, v.name as vendor_name, v.company, v.phone, v.email, v.specialty, v.rating FROM project_vendors pv JOIN vendors v ON pv.vendor_id = v.id WHERE pv.project_id = ${req.params.id}`,
       sql`SELECT * FROM loans WHERE project_id = ${req.params.id} ORDER BY created_at DESC`,
+      sql`SELECT * FROM comps WHERE project_id = ${req.params.id} ORDER BY created_at DESC`,
+      sql`SELECT * FROM project_notes WHERE project_id = ${req.params.id} ORDER BY created_at DESC`,
+      sql`SELECT * FROM documents WHERE project_id = ${req.params.id} ORDER BY created_at DESC`,
     ]);
+
+    // Fetch tasks for each phase
+    const phaseIds = phases.map((ph: any) => ph.id);
+    const allTasks = phaseIds.length > 0
+      ? await sql`SELECT * FROM phase_tasks WHERE phase_id IN ${sql(phaseIds)} ORDER BY sort_order, created_at`
+      : [];
+    const phasesWithTasks = phases.map((ph: any) => ({
+      ...ph,
+      tasks: (allTasks as any[]).filter(t => t.phase_id === ph.id),
+    }));
 
     const totalInvestment = Number(project.purchase_price) + Number(project.legal_fees) + Number(project.inspection_cost) + Number(project.closing_costs);
     const totalExpenses = Number(project.labor_cost) + Number(project.materials_cost);
@@ -82,11 +95,14 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
 
     res.json({
       ...project,
-      phases,
+      phases: phasesWithTasks,
       expenses,
       milestones,
       vendors: projectVendors,
       loans,
+      comps,
+      notes,
+      documents,
       computed: { totalInvestment, totalExpenses, holdingTotal, estProfit, roi: Math.round(roi * 10) / 10 },
     });
   } catch (err) {

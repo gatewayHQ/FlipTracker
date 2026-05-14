@@ -1,10 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, Wallet, TrendingUp, Wrench, Settings } from 'lucide-react';
+import { LayoutDashboard, Building2, Calculator, TrendingUp, Wrench, Settings } from 'lucide-react';
 
 const tabs = [
   { to: '/portfolio', label: 'Portfolio', Icon: LayoutDashboard },
   { to: '/projects', label: 'Projects', Icon: Building2 },
-  { to: '/capital', label: 'Capital', Icon: Wallet },
+  { to: '/analyzer', label: 'Analyzer', Icon: Calculator },
   { to: '/analytics', label: 'Analytics', Icon: TrendingUp },
   { to: '/vendors', label: 'Vendors', Icon: Wrench },
   { to: '/settings', label: 'Settings', Icon: Settings },

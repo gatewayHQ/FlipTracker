@@ -67,6 +67,42 @@ export default function Analytics() {
     count: projects.filter(p => p.status === s).length,
   })).filter(s => s.count > 0);
 
+  // Expense category breakdown
+  const expenseCategories = [
+    {
+      label: 'Acquisition',
+      color: '#3b82f6',
+      total: projects.reduce((s, p) => s + p.purchase_price + p.legal_fees + p.inspection_cost + p.closing_costs, 0),
+    },
+    {
+      label: 'Rehab',
+      color: '#f97316',
+      total: projects.reduce((s, p) => s + p.labor_cost + p.materials_cost, 0),
+    },
+    {
+      label: 'Holding',
+      color: '#a855f7',
+      total: projects.reduce((s, p) => s + p.holding_costs_monthly * 6, 0),
+    },
+  ];
+  const maxExpense = Math.max(...expenseCategories.map(c => c.total), 1);
+
+  // Flip velocity: sold projects with days to flip
+  const velocityData = soldProjects
+    .map(p => {
+      const days =
+        p.acquisition_date && p.sold_date
+          ? Math.round((new Date(p.sold_date).getTime() - new Date(p.acquisition_date).getTime()) / (1000 * 60 * 60 * 24))
+          : null;
+      const totalCost = p.purchase_price + p.legal_fees + p.inspection_cost + p.closing_costs + p.rehab_budget + p.holding_costs_monthly * 6;
+      const salePrice = p.actual_sale_price > 0 ? p.actual_sale_price : p.estimated_sale_price;
+      const profit = salePrice - totalCost;
+      const roi = totalCost > 0 ? Math.round((profit / totalCost) * 100 * 10) / 10 : 0;
+      return { name: p.name || p.address, days, profit, roi };
+    })
+    .filter(d => d.days !== null)
+    .sort((a, b) => (a.days as number) - (b.days as number));
+
   if (loading) {
     return (
       <div className="min-h-full bg-surface-900 flex items-center justify-center">
@@ -212,6 +248,76 @@ export default function Analytics() {
                 ))}
               </div>
             </div>
+
+            {/* Expense Category Breakdown */}
+            <div className="card">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-4">Expense Breakdown</h3>
+              <div className="space-y-4">
+                {expenseCategories.map(({ label, color, total }) => (
+                  <div key={label}>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
+                        <span className="text-sm text-gray-300">{label}</span>
+                      </div>
+                      <span className="text-sm font-bold text-white">{fmt(total)}</span>
+                    </div>
+                    <div className="h-2 bg-surface-400 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${Math.round((total / maxExpense) * 100)}%`,
+                          background: color,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 pt-3 border-t border-surface-500 flex justify-between">
+                <span className="text-xs text-gray-500">Total Costs</span>
+                <span className="text-xs font-bold text-white">
+                  {fmt(expenseCategories.reduce((s, c) => s + c.total, 0))}
+                </span>
+              </div>
+            </div>
+
+            {/* Flip Velocity */}
+            {velocityData.length > 0 && (
+              <div className="card">
+                <div className="flex items-center gap-2 mb-4">
+                  <Clock size={14} className="text-purple-400" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">Flip Velocity</h3>
+                </div>
+                <div className="space-y-0">
+                  {/* Table header */}
+                  <div className="grid grid-cols-4 gap-2 pb-2 border-b border-surface-500">
+                    <span className="text-[10px] uppercase tracking-wider text-gray-500 col-span-2">Project</span>
+                    <span className="text-[10px] uppercase tracking-wider text-gray-500 text-right">Days</span>
+                    <span className="text-[10px] uppercase tracking-wider text-gray-500 text-right">ROI</span>
+                  </div>
+                  {velocityData.map((d, i) => (
+                    <div key={i} className="grid grid-cols-4 gap-2 py-2.5 border-b border-surface-700 last:border-0">
+                      <div className="col-span-2 min-w-0">
+                        <p className="text-sm text-white font-medium truncate">{d.name}</p>
+                        <p className={`text-xs font-bold ${d.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {d.profit >= 0 ? '+' : ''}{fmt(d.profit)}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end justify-center">
+                        <span className="text-sm font-bold text-purple-400">{d.days}</span>
+                        <span className="text-[10px] text-gray-500">days</span>
+                      </div>
+                      <div className="flex flex-col items-end justify-center">
+                        <span className={`text-sm font-bold ${d.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {d.roi >= 0 ? '+' : ''}{d.roi}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

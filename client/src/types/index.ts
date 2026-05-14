@@ -53,12 +53,63 @@ export interface Project {
   health?: ProjectHealth;
 }
 
+export interface Comp {
+  id: string;
+  project_id: string;
+  address: string;
+  sale_price: number;
+  sqft: number;
+  beds: number;
+  baths: number;
+  sale_date: string;
+  source: string;
+  notes: string;
+  created_at: string;
+}
+
+export interface ProjectNote {
+  id: string;
+  project_id: string;
+  user_id: string;
+  note: string;
+  created_at: string;
+}
+
+export interface ProjectDocument {
+  id: string;
+  project_id: string;
+  name: string;
+  type: string;
+  url: string;
+  created_at: string;
+}
+
+export interface DealAnalysis {
+  id: string;
+  user_id: string;
+  name: string;
+  address: string;
+  purchase_price: number;
+  arv: number;
+  repair_cost: number;
+  holding_months: number;
+  holding_cost_monthly: number;
+  financing_cost: number;
+  agent_commission_pct: number;
+  closing_cost_pct: number;
+  notes: string;
+  created_at: string;
+}
+
 export interface ProjectDetail extends Project {
   phases: RenovationPhase[];
   expenses: Expense[];
   milestones: Milestone[];
   vendors: ProjectVendor[];
   loans: Loan[];
+  comps: Comp[];
+  notes: ProjectNote[];
+  documents: ProjectDocument[];
   computed: {
     totalInvestment: number;
     totalExpenses: number;
@@ -66,6 +117,16 @@ export interface ProjectDetail extends Project {
     estProfit: number;
     roi: number;
   };
+}
+
+export interface PhaseTask {
+  id: string;
+  phase_id: string;
+  project_id: string;
+  title: string;
+  completed: number;
+  sort_order: number;
+  created_at: string;
 }
 
 export interface RenovationPhase {
@@ -80,6 +141,7 @@ export interface RenovationPhase {
   end_date: string;
   notes: string;
   created_at: string;
+  tasks: PhaseTask[];
 }
 
 export interface Vendor {

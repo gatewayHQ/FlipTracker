@@ -170,6 +170,68 @@ export async function initializeSchema(): Promise<void> {
     )
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS phase_tasks (
+      id TEXT PRIMARY KEY,
+      phase_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      completed INTEGER DEFAULT 0,
+      sort_order INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      FOREIGN KEY (phase_id) REFERENCES renovation_phases(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS comps (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      address TEXT NOT NULL,
+      sale_price NUMERIC DEFAULT 0,
+      sqft NUMERIC DEFAULT 0,
+      beds INTEGER DEFAULT 0,
+      baths NUMERIC DEFAULT 0,
+      sale_date TEXT DEFAULT '',
+      source TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS project_notes (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      note TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS deal_analyses (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT DEFAULT '',
+      address TEXT DEFAULT '',
+      purchase_price NUMERIC DEFAULT 0,
+      arv NUMERIC DEFAULT 0,
+      repair_cost NUMERIC DEFAULT 0,
+      holding_months INTEGER DEFAULT 6,
+      holding_cost_monthly NUMERIC DEFAULT 0,
+      financing_cost NUMERIC DEFAULT 0,
+      agent_commission_pct NUMERIC DEFAULT 6,
+      closing_cost_pct NUMERIC DEFAULT 2,
+      notes TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `;
+
   // Additive migrations for existing deployments
   await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE CASCADE`;
   await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE CASCADE`;

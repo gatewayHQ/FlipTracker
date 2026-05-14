@@ -61,7 +61,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
 
 router.get('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const rows = await sql`SELECT * FROM projects WHERE id = ${req.params.id} AND user_id = ${req.userId}`;
+    const rows = await sql`SELECT * FROM projects WHERE id = ${req.params.id} AND user_id = ${req.userId!}`;
     const project = rows[0] as any;
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
@@ -107,14 +107,15 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
       documents,
       computed: { totalInvestment, totalExpenses, holdingTotal, estProfit, roi: Math.round(roi * 10) / 10 },
     });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch project' });
+  } catch (err: any) {
+    console.error('[projects get]', err);
+    res.status(500).json({ error: 'Failed to fetch project', detail: err?.message });
   }
 });
 
 router.put('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const rows = await sql`SELECT * FROM projects WHERE id = ${req.params.id} AND user_id = ${req.userId}`;
+    const rows = await sql`SELECT * FROM projects WHERE id = ${req.params.id} AND user_id = ${req.userId!}`;
     const e = rows[0] as any;
     if (!e) return res.status(404).json({ error: 'Project not found' });
     const b = req.body;
@@ -148,18 +149,20 @@ router.put('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
       RETURNING *
     `;
     res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to update project' });
+  } catch (err: any) {
+    console.error('[projects update]', err);
+    res.status(500).json({ error: 'Failed to update project', detail: err?.message });
   }
 });
 
 router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const rows = await sql`DELETE FROM projects WHERE id = ${req.params.id} AND user_id = ${req.userId} RETURNING id`;
+    const rows = await sql`DELETE FROM projects WHERE id = ${req.params.id} AND user_id = ${req.userId!} RETURNING id`;
     if (!rows[0]) return res.status(404).json({ error: 'Project not found' });
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete project' });
+  } catch (err: any) {
+    console.error('[projects delete]', err);
+    res.status(500).json({ error: 'Failed to delete project', detail: err?.message });
   }
 });
 

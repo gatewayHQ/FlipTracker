@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, SlidersHorizontal, MapPin, LayoutList, Columns } from 'lucide-react';
+import { Plus, Search, SlidersHorizontal, MapPin, LayoutList, Columns, AlertCircle } from 'lucide-react';
 import ProjectCard from '../components/ProjectCard';
 import { api, fmt } from '../lib/api';
 import type { Project, ProjectStatus } from '../types';
@@ -25,6 +25,7 @@ export default function Projects() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ProjectStatus | 'all'>('all');
   const [view, setView] = useState<'list' | 'kanban'>('list');
@@ -33,7 +34,10 @@ export default function Projects() {
     api.projects.list().then((data) => {
       setProjects(data as Project[]);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((err: Error) => {
+      setErrorMsg(err.message || 'Failed to load projects');
+      setLoading(false);
+    });
   }, []);
 
   const filtered = projects.filter(p => {
@@ -81,6 +85,13 @@ export default function Projects() {
           </button>
         </div>
       </div>
+
+      {errorMsg && (
+        <div className="mx-5 mb-3 flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl p-3">
+          <AlertCircle size={16} className="text-red-400 flex-shrink-0" />
+          <span className="text-red-400 text-sm">{errorMsg}</span>
+        </div>
+      )}
 
       {/* Search */}
       <div className="px-5 mb-4">

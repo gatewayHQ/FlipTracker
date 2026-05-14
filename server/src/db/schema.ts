@@ -240,4 +240,22 @@ export async function initializeSchema(): Promise<void> {
   await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS insurance_expiry TEXT DEFAULT ''`;
   await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS w9_on_file INTEGER DEFAULT 0`;
   await sql`ALTER TABLE milestones ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT ''`;
+
+  // Remove orphaned rows that were saved without a user_id (caused by old auth bug),
+  // then enforce NOT NULL so future inserts always require a valid user.
+  await sql`DELETE FROM projects WHERE user_id IS NULL`;
+  await sql`DELETE FROM vendors WHERE user_id IS NULL`;
+  // ALTER COLUMN is idempotent on already-NOT NULL columns — safe to run repeatedly.
+  await sql`
+    DO $$ BEGIN
+      ALTER TABLE projects ALTER COLUMN user_id SET NOT NULL;
+    EXCEPTION WHEN others THEN NULL;
+    END $$
+  `;
+  await sql`
+    DO $$ BEGIN
+      ALTER TABLE vendors ALTER COLUMN user_id SET NOT NULL;
+    EXCEPTION WHEN others THEN NULL;
+    END $$
+  `;
 }

@@ -3,11 +3,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ChevronLeft, Edit2, Trash2, Plus, Check, Clock, DollarSign,
   Wrench, Users, FileText, X, MapPin, TrendingUp, AlertTriangle,
-  AlertCircle, Flame, Target, Calendar,
+  AlertCircle, Flame, Target, Calendar, Link, ChevronDown, ChevronRight,
+  ThumbsUp, ThumbsDown, Send,
 } from 'lucide-react';
 import DonutChart from '../components/DonutChart';
 import { api, fmt, fmtFull, fmtDate, fmtDateShort } from '../lib/api';
-import type { ProjectDetail as PD, RenovationPhase, Milestone, Vendor, Expense } from '../types';
+import type {
+  ProjectDetail as PD, RenovationPhase, Milestone, Vendor, Expense,
+  Bid, ChangeOrder, ContractorToken,
+} from '../types';
 import { STATUS_COLORS, EXPENSE_CATEGORIES } from '../types';
 
 type Tab = 'overview' | 'phases' | 'expenses' | 'milestones' | 'vendors';
@@ -16,6 +20,12 @@ const PHASE_STATUS_COLORS: Record<string, string> = {
   pending: 'bg-surface-400 text-gray-400',
   in_progress: 'bg-brand/20 text-brand',
   completed: 'bg-green-500/20 text-green-400',
+};
+
+const BID_STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-yellow-500/20 text-yellow-400',
+  approved: 'bg-green-500/20 text-green-400',
+  rejected: 'bg-red-500/20 text-red-400',
 };
 
 // ── Hold cost helpers ────────────────────────────────────────────────────────
@@ -49,7 +59,6 @@ function ARVCalculator({ arv, rehabBudget, purchasePrice }: { arv: number; rehab
         <h3 className="text-xs font-bold uppercase tracking-widest text-brand">ARV & Deal Analysis</h3>
       </div>
 
-      {/* 70% Rule */}
       <div className={`rounded-xl p-3 mb-4 ${underMAO ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-bold uppercase tracking-wider text-gray-400">70% Rule Check</span>
@@ -72,7 +81,6 @@ function ARVCalculator({ arv, rehabBudget, purchasePrice }: { arv: number; rehab
         )}
       </div>
 
-      {/* Profit sensitivity */}
       <h4 className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Profit Sensitivity</h4>
       <div className="space-y-1.5">
         {scenarios.map(s => (
@@ -161,13 +169,41 @@ export default function ProjectDetail() {
   const [newExpense, setNewExpense] = useState({ category: 'labor', description: '', amount: '', date: new Date().toISOString().slice(0, 10) });
   const [addingExpense, setAddingExpense] = useState(false);
 
+  // Bids state
+  const [bids, setBids] = useState<Bid[]>([]);
+  const [addingBid, setAddingBid] = useState(false);
+  const [newBid, setNewBid] = useState({ vendor_id: '', phase_name: '', scope_description: '', amount: '', submitted_date: new Date().toISOString().slice(0, 10) });
+
+  // Change orders state
+  const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
+  const [addingCO, setAddingCO] = useState<string | null>(null); // phase_name being added to
+  const [newCO, setNewCO] = useState({ vendor_id: '', description: '', amount: '', submitted_date: new Date().toISOString().slice(0, 10) });
+  const [expandedCOPhases, setExpandedCOPhases] = useState<Set<string>>(new Set());
+
+  // Portal link state
+  const [generatingLink, setGeneratingLink] = useState<string | null>(null); // vendor_id
+  const [portalLinks, setPortalLinks] = useState<Record<string, ContractorToken[]>>({}); // vendor_id -> tokens
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
+
   const loadProject = () => {
     if (!id) return;
     api.projects.get(id).then(d => { setProject(d as PD); setLoading(false); }).catch(() => setLoading(false));
   };
 
+  const loadBids = () => {
+    if (!id) return;
+    api.bids.list(id).then(b => setBids(b as Bid[])).catch(() => {});
+  };
+
+  const loadChangeOrders = () => {
+    if (!id) return;
+    api.changeOrders.list(id).then(c => setChangeOrders(c as ChangeOrder[])).catch(() => {});
+  };
+
   useEffect(() => {
     loadProject();
+    loadBids();
+    loadChangeOrders();
     api.vendors.list().then(v => setAllVendors(v as Vendor[]));
   }, [id]);
 
@@ -201,6 +237,51 @@ export default function ProjectDetail() {
   const handleAttachVendor = async (vendorId: string) => { try { await api.vendors.attachToProject(vendorId, id!, {}); loadProject(); } catch {} };
   const handleDetachVendor = async (vendorId: string) => { await api.vendors.detachFromProject(vendorId, id!); loadProject(); };
 
+  // Bid handlers
+  const handleAddBid = async () => {
+    if (!newBid.vendor_id || !newBid.amount) return;
+    await api.bids.create(id!, { ...newBid, amount: parseFloat(newBid.amount) });
+    setNewBid({ vendor_id: '', phase_name: '', scope_description: '', amount: '', submitted_date: new Date().toISOString().slice(0, 10) });
+    setAddingBid(false);
+    loadBids();
+  };
+  const handleApproveBid = async (bidId: string) => { await api.bids.approve(id!, bidId); loadBids(); };
+  const handleRejectBid = async (bidId: string) => { await api.bids.reject(id!, bidId); loadBids(); };
+  const handleDeleteBid = async (bidId: string) => { await api.bids.delete(id!, bidId); loadBids(); };
+
+  // Change order handlers
+  const handleAddCO = async (phaseName: string) => {
+    if (!newCO.vendor_id || !newCO.description.trim() || !newCO.amount) return;
+    await api.changeOrders.create(id!, { ...newCO, phase_name: phaseName, amount: parseFloat(newCO.amount) });
+    setNewCO({ vendor_id: '', description: '', amount: '', submitted_date: new Date().toISOString().slice(0, 10) });
+    setAddingCO(null);
+    loadChangeOrders();
+  };
+  const handleApproveCO = async (coId: string) => { await api.changeOrders.approve(id!, coId); loadChangeOrders(); };
+  const handleRejectCO = async (coId: string) => { await api.changeOrders.reject(id!, coId); loadChangeOrders(); };
+  const handleDeleteCO = async (coId: string) => { await api.changeOrders.delete(id!, coId); loadChangeOrders(); };
+
+  // Portal link handlers
+  const handleGenerateLink = async (vendorId: string, vendorName: string) => {
+    setGeneratingLink(vendorId);
+    try {
+      const result = await api.contractor.generateLink(id!, vendorId, { label: vendorName }) as ContractorToken;
+      setPortalLinks(prev => ({
+        ...prev,
+        [vendorId]: [result, ...(prev[vendorId] || [])],
+      }));
+    } catch {}
+    setGeneratingLink(null);
+  };
+
+  const handleCopyLink = (token: string) => {
+    const url = `${window.location.origin}/contractor/${token}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedToken(token);
+      setTimeout(() => setCopiedToken(null), 2000);
+    });
+  };
+
   if (loading) return <div className="min-h-full bg-surface-900 flex items-center justify-center"><div className="text-gray-400 animate-pulse">Loading...</div></div>;
   if (!project) return (
     <div className="min-h-full bg-surface-900 flex items-center justify-center">
@@ -215,12 +296,10 @@ export default function ProjectDetail() {
   const totalPhases = project.phases.length;
   const phaseProgress = totalPhases > 0 ? Math.round((completedPhases / totalPhases) * 100) : 0;
 
-  // Real hold cost (actual days, not fixed 6mo)
   const holdDays = calcHoldDays(project.acquisition_date, project.sold_date);
   const dailyCost = project.holding_costs_monthly / 30.4;
   const realHoldCost = holdDays * dailyCost;
 
-  // Annualized ROI
   const totalCostForROI = computed.totalInvestment + rehabSpent + realHoldCost;
   const realProfit = (project.actual_sale_price > 0 ? project.actual_sale_price : project.estimated_sale_price) - totalCostForROI;
   const simpleROI = totalCostForROI > 0 ? (realProfit / totalCostForROI) * 100 : 0;
@@ -228,15 +307,18 @@ export default function ProjectDetail() {
 
   const capitalPercent = Math.round(((project.purchase_price + project.legal_fees + project.inspection_cost + project.closing_costs + rehabSpent) / Math.max(project.estimated_sale_price, 1)) * 100);
 
-  // Overdue milestones count
   const overdueMilestones = project.milestones.filter(m => !m.completed && daysUntil(m.due_date) < 0 && m.due_date);
+
+  const pendingBids = bids.filter(b => b.status === 'pending').length;
+  const pendingCOs = changeOrders.filter(c => c.status === 'pending').length;
+  const vendorTabBadge = pendingBids + pendingCOs;
 
   const tabs: { id: Tab; label: string; Icon: any; badge?: number }[] = [
     { id: 'overview', label: 'Overview', Icon: FileText },
-    { id: 'phases', label: 'Phases', Icon: Wrench },
+    { id: 'phases', label: 'Phases', Icon: Wrench, badge: pendingCOs > 0 ? pendingCOs : undefined },
     { id: 'expenses', label: 'Expenses', Icon: DollarSign },
     { id: 'milestones', label: 'Timeline', Icon: Clock, badge: overdueMilestones.length },
-    { id: 'vendors', label: 'Vendors', Icon: Users },
+    { id: 'vendors', label: 'Vendors', Icon: Users, badge: vendorTabBadge > 0 ? vendorTabBadge : undefined },
   ];
 
   return (
@@ -304,7 +386,6 @@ export default function ProjectDetail() {
         {/* ===== OVERVIEW ===== */}
         {tab === 'overview' && (
           <>
-            {/* Budget overrun banner */}
             {rehabPercent > 100 && (
               <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
                 <AlertTriangle size={16} className="text-red-400 flex-shrink-0" />
@@ -315,7 +396,6 @@ export default function ProjectDetail() {
               </div>
             )}
 
-            {/* P&L Summary card — live */}
             <div className="card border border-brand/20">
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp size={16} className="text-brand" />
@@ -348,7 +428,6 @@ export default function ProjectDetail() {
               </div>
             </div>
 
-            {/* Capital Utilization Donut */}
             <div className="card flex flex-col items-center py-6">
               <p className="label mb-4 text-center">Capital Utilization</p>
               <DonutChart percent={Math.min(capitalPercent, 99)} size={200} strokeWidth={20} />
@@ -357,7 +436,6 @@ export default function ProjectDetail() {
               </p>
             </div>
 
-            {/* ARV & Deal Analysis */}
             {project.estimated_sale_price > 0 && (
               <ARVCalculator
                 arv={project.estimated_sale_price}
@@ -366,7 +444,6 @@ export default function ProjectDetail() {
               />
             )}
 
-            {/* Hold Cost Tracker */}
             {project.holding_costs_monthly > 0 && project.acquisition_date && (
               <HoldCostTracker
                 acquisitionDate={project.acquisition_date}
@@ -376,7 +453,6 @@ export default function ProjectDetail() {
               />
             )}
 
-            {/* Investment & Acquisition */}
             <div className="card">
               <div className="flex items-center gap-2 mb-4">
                 <DollarSign size={16} className="text-brand" />
@@ -401,7 +477,6 @@ export default function ProjectDetail() {
               </div>
             </div>
 
-            {/* Renovation & Holding */}
             <div className="card">
               <h3 className="text-sm font-bold text-white mb-4">Renovation & Holding</h3>
               <div className="flex justify-between text-xs text-gray-400 mb-2">
@@ -434,7 +509,6 @@ export default function ProjectDetail() {
               </div>
             </div>
 
-            {/* Key Dates */}
             {(project.acquisition_date || project.target_completion_date || project.listed_date || project.sold_date) && (
               <div className="card">
                 <div className="flex items-center gap-2 mb-4">
@@ -467,7 +541,6 @@ export default function ProjectDetail() {
               </div>
             )}
 
-            {/* Upcoming Milestones preview */}
             {project.milestones.filter(m => !m.completed).slice(0, 3).length > 0 && (
               <div className="card">
                 <div className="flex items-center justify-between mb-3">
@@ -507,10 +580,12 @@ export default function ProjectDetail() {
               <div className="w-12 h-12"><DonutChart percent={phaseProgress} size={48} strokeWidth={6} label="" /></div>
             </div>
 
-            {/* Budget summary across phases */}
             {project.phases.some(p => p.budget > 0) && (() => {
               const totalBudget = project.phases.reduce((s, p) => s + Number(p.budget), 0);
               const totalActual = project.phases.reduce((s, p) => s + Number(p.actual_cost), 0);
+              const totalApprovedCOs = changeOrders
+                .filter(c => c.status === 'approved')
+                .reduce((s, c) => s + Number(c.amount), 0);
               const variance = totalActual - totalBudget;
               const pct = totalBudget > 0 ? Math.round((totalActual / totalBudget) * 100) : 0;
               return (
@@ -521,10 +596,11 @@ export default function ProjectDetail() {
                       {variance > 0 ? '+' : ''}{fmt(variance)} variance
                     </span>
                   </div>
-                  <div className="flex gap-4 text-xs">
+                  <div className="flex gap-4 text-xs flex-wrap">
                     <div><span className="text-gray-500">Budget </span><span className="font-bold text-white">{fmt(totalBudget)}</span></div>
                     <div><span className="text-gray-500">Actual </span><span className={`font-bold ${variance > 0 ? 'text-red-400' : 'text-green-400'}`}>{fmt(totalActual)}</span></div>
                     <div><span className="text-gray-500">Used </span><span className="font-bold text-white">{pct}%</span></div>
+                    {totalApprovedCOs > 0 && <div><span className="text-gray-500">Approved COs </span><span className="font-bold text-yellow-400">+{fmt(totalApprovedCOs)}</span></div>}
                   </div>
                 </div>
               );
@@ -541,6 +617,11 @@ export default function ProjectDetail() {
                 const actual = Number(phase.actual_cost);
                 const over = budget > 0 && actual > budget;
                 const pct = budget > 0 ? Math.round((actual / budget) * 100) : 0;
+                const phaseCOs = changeOrders.filter(c => c.phase_name === phase.phase_name);
+                const pendingCOCount = phaseCOs.filter(c => c.status === 'pending').length;
+                const approvedCOTotal = phaseCOs.filter(c => c.status === 'approved').reduce((s, c) => s + Number(c.amount), 0);
+                const coExpanded = expandedCOPhases.has(phase.id);
+
                 return (
                   <div key={phase.id} className={`card ${over ? 'border border-red-500/30' : ''}`}>
                     <div className="flex items-center justify-between">
@@ -561,6 +642,11 @@ export default function ProjectDetail() {
                       </div>
                       <div className="flex items-center gap-2">
                         {over && <AlertTriangle size={14} className="text-red-400" />}
+                        {pendingCOCount > 0 && (
+                          <span className="w-5 h-5 rounded-full bg-yellow-500/20 text-yellow-400 text-[10px] font-bold flex items-center justify-center">
+                            {pendingCOCount}
+                          </span>
+                        )}
                         <span className={`status-badge text-[10px] ${PHASE_STATUS_COLORS[phase.status]}`}>{phase.status.replace('_', ' ')}</span>
                       </div>
                     </div>
@@ -568,9 +654,10 @@ export default function ProjectDetail() {
                     {(budget > 0 || actual > 0) && (
                       <div className="mt-3 pt-3 border-t border-surface-400/20">
                         <div className="flex justify-between text-xs mb-1.5">
-                          <div className="flex gap-3">
+                          <div className="flex gap-3 flex-wrap">
                             <span><span className="text-gray-500">Budget </span><span className="text-white font-semibold">{fmt(budget)}</span></span>
                             <span><span className="text-gray-500">Actual </span><span className={`font-semibold ${over ? 'text-red-400' : actual > 0 ? 'text-green-400' : 'text-gray-400'}`}>{fmt(actual)}</span></span>
+                            {approvedCOTotal > 0 && <span><span className="text-gray-500">COs </span><span className="font-semibold text-yellow-400">+{fmt(approvedCOTotal)}</span></span>}
                           </div>
                           <span className={`font-bold ${over ? 'text-red-400' : 'text-gray-400'}`}>{pct}%</span>
                         </div>
@@ -589,6 +676,92 @@ export default function ProjectDetail() {
                       </div>
                     )}
                     {phase.notes && <p className="text-xs text-gray-500 mt-2">{phase.notes}</p>}
+
+                    {/* Change Orders section */}
+                    <div className="mt-3 pt-3 border-t border-surface-400/20">
+                      <button
+                        onClick={() => setExpandedCOPhases(prev => {
+                          const next = new Set(prev);
+                          next.has(phase.id) ? next.delete(phase.id) : next.add(phase.id);
+                          return next;
+                        })}
+                        className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors w-full"
+                      >
+                        {coExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        <span className="font-semibold uppercase tracking-wider">Change Orders</span>
+                        {phaseCOs.length > 0 && (
+                          <span className="ml-auto text-gray-500">{phaseCOs.length} • {fmt(phaseCOs.reduce((s, c) => s + Number(c.amount), 0))}</span>
+                        )}
+                      </button>
+
+                      {coExpanded && (
+                        <div className="mt-2 space-y-2">
+                          {phaseCOs.length === 0 && <p className="text-xs text-gray-600 pl-4">No change orders</p>}
+                          {phaseCOs.map(co => (
+                            <div key={co.id} className="bg-surface-600 rounded-xl px-3 py-2 flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${BID_STATUS_COLORS[co.status]}`}>{co.status}</span>
+                                  {co.vendor_name && <span className="text-[10px] text-gray-500 truncate">{co.vendor_name}</span>}
+                                </div>
+                                <p className="text-xs text-white font-medium truncate">{co.description}</p>
+                                <p className="text-xs font-bold text-brand mt-0.5">{fmtFull(Number(co.amount))}</p>
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                {co.status === 'pending' && (
+                                  <>
+                                    <button onClick={() => handleApproveCO(co.id)} className="text-green-400 hover:text-green-300 transition-colors" title="Approve">
+                                      <ThumbsUp size={13} />
+                                    </button>
+                                    <button onClick={() => handleRejectCO(co.id)} className="text-red-400 hover:text-red-300 transition-colors" title="Reject">
+                                      <ThumbsDown size={13} />
+                                    </button>
+                                  </>
+                                )}
+                                <button onClick={() => handleDeleteCO(co.id)} className="text-gray-600 hover:text-red-400 transition-colors"><X size={12} /></button>
+                              </div>
+                            </div>
+                          ))}
+
+                          {addingCO === phase.phase_name ? (
+                            <div className="bg-surface-600 rounded-xl p-3 space-y-2">
+                              <div>
+                                <label className="label text-[10px]">Vendor</label>
+                                <select value={newCO.vendor_id} onChange={e => setNewCO(p => ({ ...p, vendor_id: e.target.value }))} className="input-field text-xs py-1.5">
+                                  <option value="">Select vendor</option>
+                                  {allVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="label text-[10px]">Description</label>
+                                <input value={newCO.description} onChange={e => setNewCO(p => ({ ...p, description: e.target.value }))} placeholder="Scope of change" className="input-field text-xs py-1.5" />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="label text-[10px]">Amount ($)</label>
+                                  <input type="number" value={newCO.amount} onChange={e => setNewCO(p => ({ ...p, amount: e.target.value }))} placeholder="0" className="input-field text-xs py-1.5" />
+                                </div>
+                                <div>
+                                  <label className="label text-[10px]">Date</label>
+                                  <input type="date" value={newCO.submitted_date} onChange={e => setNewCO(p => ({ ...p, submitted_date: e.target.value }))} className="input-field text-xs py-1.5" />
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <button onClick={() => handleAddCO(phase.phase_name)} className="flex-1 btn-primary rounded-lg py-2 text-xs">Add CO</button>
+                                <button onClick={() => setAddingCO(null)} className="px-3 py-2 rounded-lg bg-surface-500 text-gray-400 text-xs">Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setAddingCO(phase.phase_name); setNewCO({ vendor_id: '', description: '', amount: '', submitted_date: new Date().toISOString().slice(0, 10) }); }}
+                              className="flex items-center gap-1 text-xs text-gray-500 hover:text-brand transition-colors pl-4"
+                            >
+                              <Plus size={12} />Add Change Order
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })
@@ -760,25 +933,193 @@ export default function ProjectDetail() {
 
         {/* ===== VENDORS ===== */}
         {tab === 'vendors' && (
-          <div className="space-y-3">
-            {project.vendors.map(v => (
-              <div key={v.id} className="card">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-bold text-white text-sm">{v.vendor_name}</p>
-                    {v.company && <p className="text-xs text-gray-400">{v.company}</p>}
-                    {v.specialty && <span className="text-xs bg-brand/20 text-brand px-2 py-0.5 rounded-full mt-1 inline-block">{v.specialty}</span>}
-                  </div>
-                  <button onClick={() => handleDetachVendor(v.vendor_id)} className="text-gray-600 hover:text-red-400 transition-colors"><X size={16} /></button>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  {v.phone && <a href={`tel:${v.phone}`} className="text-brand">{v.phone}</a>}
-                  {v.contracted_amount > 0 && <div><span className="text-gray-500">Contracted: </span><span className="text-white font-semibold">{fmt(Number(v.contracted_amount))}</span></div>}
-                  {v.paid_amount > 0 && <div><span className="text-gray-500">Paid: </span><span className="text-green-400 font-semibold">{fmt(Number(v.paid_amount))}</span></div>}
-                </div>
-              </div>
-            ))}
+          <div className="space-y-4">
 
+            {/* ── BID BOARD ──────────────────────────────────────────── */}
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-brand">Bid Board</h3>
+                  {pendingBids > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 text-[10px] font-bold">
+                      {pendingBids} pending
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => setAddingBid(true)}
+                  className="flex items-center gap-1 text-xs text-brand font-semibold"
+                >
+                  <Plus size={12} />Add Bid
+                </button>
+              </div>
+
+              {addingBid && (
+                <div className="bg-surface-600 rounded-xl p-3 mb-3 space-y-2">
+                  <div>
+                    <label className="label text-[10px]">Vendor</label>
+                    <select value={newBid.vendor_id} onChange={e => setNewBid(p => ({ ...p, vendor_id: e.target.value }))} className="input-field text-xs py-1.5">
+                      <option value="">Select vendor</option>
+                      {allVendors.map(v => <option key={v.id} value={v.id}>{v.name} — {v.specialty}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label text-[10px]">Phase / Scope</label>
+                    <input value={newBid.phase_name} onChange={e => setNewBid(p => ({ ...p, phase_name: e.target.value }))} placeholder="e.g. Kitchen Remodel" className="input-field text-xs py-1.5" />
+                  </div>
+                  <div>
+                    <label className="label text-[10px]">Scope Description</label>
+                    <input value={newBid.scope_description} onChange={e => setNewBid(p => ({ ...p, scope_description: e.target.value }))} placeholder="What's included" className="input-field text-xs py-1.5" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="label text-[10px]">Amount ($)</label>
+                      <input type="number" value={newBid.amount} onChange={e => setNewBid(p => ({ ...p, amount: e.target.value }))} placeholder="0" className="input-field text-xs py-1.5" />
+                    </div>
+                    <div>
+                      <label className="label text-[10px]">Date</label>
+                      <input type="date" value={newBid.submitted_date} onChange={e => setNewBid(p => ({ ...p, submitted_date: e.target.value }))} className="input-field text-xs py-1.5" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={handleAddBid} className="flex-1 btn-primary rounded-lg py-2 text-xs">Submit Bid</button>
+                    <button onClick={() => setAddingBid(false)} className="px-3 py-2 rounded-lg bg-surface-500 text-gray-400 text-xs">Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              {bids.length === 0 ? (
+                <p className="text-xs text-gray-500 text-center py-3">No bids logged. Add contractor bids to compare prices.</p>
+              ) : (
+                <div className="space-y-2">
+                  {/* Group by phase */}
+                  {Array.from(new Set(bids.map(b => b.phase_name || 'General'))).map(phaseName => {
+                    const phaseBids = bids.filter(b => (b.phase_name || 'General') === phaseName);
+                    const minBid = Math.min(...phaseBids.map(b => Number(b.amount)));
+                    const maxBid = Math.max(...phaseBids.map(b => Number(b.amount)));
+                    return (
+                      <div key={phaseName}>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1.5">{phaseName}</p>
+                        {phaseBids.map(bid => {
+                          const isLowest = phaseBids.length > 1 && Number(bid.amount) === minBid && bid.status !== 'rejected';
+                          const isHighest = phaseBids.length > 1 && Number(bid.amount) === maxBid && bid.status !== 'rejected';
+                          return (
+                            <div key={bid.id} className={`bg-surface-600 rounded-xl px-3 py-2 mb-1.5 ${bid.status === 'approved' ? 'border border-green-500/30' : bid.status === 'rejected' ? 'opacity-50' : ''}`}>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                    <span className="text-sm font-bold text-white">{bid.vendor_name || 'Unknown'}</span>
+                                    {bid.company && <span className="text-[10px] text-gray-500">{bid.company}</span>}
+                                    {isLowest && <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full font-bold">LOWEST</span>}
+                                    {isHighest && phaseBids.length > 1 && <span className="text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded-full">HIGH</span>}
+                                  </div>
+                                  {bid.scope_description && <p className="text-xs text-gray-400 truncate">{bid.scope_description}</p>}
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-sm font-bold text-brand">{fmtFull(Number(bid.amount))}</span>
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${BID_STATUS_COLORS[bid.status]}`}>{bid.status}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  {bid.status === 'pending' && (
+                                    <>
+                                      <button onClick={() => handleApproveBid(bid.id)} className="text-green-400 hover:text-green-300 transition-colors" title="Approve">
+                                        <ThumbsUp size={14} />
+                                      </button>
+                                      <button onClick={() => handleRejectBid(bid.id)} className="text-red-400 hover:text-red-300 transition-colors" title="Reject">
+                                        <ThumbsDown size={14} />
+                                      </button>
+                                    </>
+                                  )}
+                                  <button onClick={() => handleDeleteBid(bid.id)} className="text-gray-600 hover:text-red-400 transition-colors"><X size={13} /></button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {phaseBids.length > 1 && (
+                          <p className="text-[10px] text-gray-500 pl-1 mb-2">
+                            Spread: {fmt(maxBid - minBid)} ({Math.round(((maxBid - minBid) / minBid) * 100)}%)
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ── ATTACHED VENDORS + PORTAL LINKS ─────────────────── */}
+            {project.vendors.map(v => {
+              const vendorLinks = portalLinks[v.vendor_id] || [];
+              return (
+                <div key={v.id} className="card">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-bold text-white text-sm">{v.vendor_name}</p>
+                      {v.company && <p className="text-xs text-gray-400">{v.company}</p>}
+                      {v.specialty && <span className="text-xs bg-brand/20 text-brand px-2 py-0.5 rounded-full mt-1 inline-block">{v.specialty}</span>}
+                    </div>
+                    <button onClick={() => handleDetachVendor(v.vendor_id)} className="text-gray-600 hover:text-red-400 transition-colors"><X size={16} /></button>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    {v.phone && <a href={`tel:${v.phone}`} className="text-brand">{v.phone}</a>}
+                    {v.contracted_amount > 0 && <div><span className="text-gray-500">Contracted: </span><span className="text-white font-semibold">{fmt(Number(v.contracted_amount))}</span></div>}
+                    {v.paid_amount > 0 && <div><span className="text-gray-500">Paid: </span><span className="text-green-400 font-semibold">{fmt(Number(v.paid_amount))}</span></div>}
+                  </div>
+
+                  {/* Portal link section */}
+                  <div className="mt-3 pt-3 border-t border-surface-400/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Link size={12} className="text-gray-500" />
+                        <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Contractor Portal</span>
+                      </div>
+                      <button
+                        onClick={() => handleGenerateLink(v.vendor_id, v.vendor_name || '')}
+                        disabled={generatingLink === v.vendor_id}
+                        className="text-xs text-brand font-semibold disabled:opacity-50"
+                      >
+                        {generatingLink === v.vendor_id ? 'Generating…' : '+ New Link'}
+                      </button>
+                    </div>
+
+                    {vendorLinks.length > 0 && (
+                      <div className="mt-2 space-y-1.5">
+                        {vendorLinks.map(link => {
+                          const token = link.token || (link.portal_url?.split('/').pop() ?? '');
+                          const isCopied = copiedToken === token;
+                          const expired = link.expires_at && new Date(link.expires_at) < new Date();
+                          return (
+                            <div key={link.id} className="flex items-center gap-2 bg-surface-600 rounded-lg px-2.5 py-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[10px] text-gray-400 font-mono truncate">/contractor/{token.slice(0, 12)}…</p>
+                                {link.expires_at && (
+                                  <p className={`text-[9px] mt-0.5 ${expired ? 'text-red-400' : 'text-gray-500'}`}>
+                                    {expired ? 'Expired' : `Expires ${fmtDateShort(link.expires_at.slice(0, 10))}`}
+                                  </p>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleCopyLink(token)}
+                                className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg transition-colors ${
+                                  isCopied ? 'bg-green-500/20 text-green-400' : 'bg-brand/20 text-brand hover:bg-brand/30'
+                                }`}
+                              >
+                                {isCopied ? <Check size={10} /> : <Send size={10} />}
+                                {isCopied ? 'Copied!' : 'Copy'}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <p className="text-[9px] text-gray-600 mt-1.5">Share link with contractor — they can update phase status & request draws.</p>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Attach Vendor */}
             <div className="card">
               <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Attach Vendor</h4>
               <div className="space-y-2 max-h-48 overflow-y-auto">

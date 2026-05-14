@@ -142,6 +142,63 @@ export interface DashboardData {
   recentProjects: (Project & { phase_count: number; completed_phases: number; progress: number })[];
 }
 
+export interface Bid {
+  id: string;
+  project_id: string;
+  vendor_id: string;
+  phase_name: string;
+  scope_description: string;
+  amount: number;
+  submitted_date: string;
+  status: 'pending' | 'approved' | 'rejected';
+  notes: string;
+  created_at: string;
+  vendor_name?: string;
+  company?: string;
+  specialty?: string;
+  phone?: string;
+}
+
+export interface ChangeOrder {
+  id: string;
+  project_id: string;
+  vendor_id: string;
+  phase_name: string;
+  description: string;
+  amount: number;
+  submitted_date: string;
+  approved_date: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  vendor_name?: string;
+  company?: string;
+}
+
+export interface ContractorToken {
+  id: string;
+  project_id: string;
+  vendor_id: string;
+  token: string;
+  label: string;
+  expires_at: string;
+  created_at: string;
+  portal_url?: string;
+}
+
+export interface DrawSchedule {
+  id: string;
+  project_id: string;
+  draw_number: number;
+  description: string;
+  amount: number;
+  percent_complete_required: number;
+  status: 'pending' | 'requested' | 'released';
+  scheduled_date: string;
+  paid_date: string;
+  notes: string;
+  created_at: string;
+}
+
 export const RENOVATION_PHASES = [
   { name: 'Demo', icon: '🔨' },
   { name: 'Junk Removal', icon: '🗑️' },

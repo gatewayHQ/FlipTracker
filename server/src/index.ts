@@ -9,6 +9,9 @@ import phasesRouter from './routes/phases';
 import expensesRouter from './routes/expenses';
 import milestonesRouter from './routes/milestones';
 import vendorsRouter from './routes/vendors';
+import bidsRouter from './routes/bids';
+import changeOrdersRouter from './routes/change-orders';
+import contractorPortalRouter from './routes/contractor-portal';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,7 +24,10 @@ app.use('/api/projects', projectsRouter);
 app.use('/api/projects', phasesRouter);
 app.use('/api/projects', expensesRouter);
 app.use('/api/projects', milestonesRouter);
+app.use('/api/projects/:projectId/bids', bidsRouter);
+app.use('/api/projects/:projectId/change-orders', changeOrdersRouter);
 app.use('/api/vendors', vendorsRouter);
+app.use('/api', contractorPortalRouter);
 
 const clientDist = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientDist));

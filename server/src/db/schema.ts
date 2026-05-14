@@ -146,6 +146,36 @@ export async function initializeSchema(): Promise<void> {
     )
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS contractor_tokens (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      vendor_id TEXT NOT NULL,
+      token TEXT UNIQUE NOT NULL,
+      label TEXT DEFAULT '',
+      expires_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS draw_schedules (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      draw_number INTEGER NOT NULL DEFAULT 1,
+      description TEXT DEFAULT '',
+      amount NUMERIC DEFAULT 0,
+      percent_complete_required INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'pending',
+      scheduled_date TEXT DEFAULT '',
+      paid_date TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `;
+
   // Safe column additions for vendor compliance (idempotent)
   await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS license_number TEXT DEFAULT ''`;
   await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS license_state TEXT DEFAULT ''`;

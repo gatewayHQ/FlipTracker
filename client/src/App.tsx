@@ -8,11 +8,15 @@ import Capital from './pages/Capital';
 import Analytics from './pages/Analytics';
 import Vendors from './pages/Vendors';
 import Settings from './pages/Settings';
+import ContractorPortal from './pages/ContractorPortal';
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public contractor portal — no nav/layout */}
+        <Route path="/contractor/:token" element={<ContractorPortal />} />
+
         <Route element={<Layout />}>
           <Route path="/" element={<Navigate to="/portfolio" replace />} />
           <Route path="/portfolio" element={<Portfolio />} />

@@ -59,6 +59,43 @@ export const api = {
     detachFromProject: (vendorId: string, projectId: string) =>
       req('DELETE', `/vendors/${vendorId}/projects/${projectId}`),
   },
+  bids: {
+    list: (projectId: string) => req('GET', `/projects/${projectId}/bids`),
+    create: (projectId: string, data: unknown) => req('POST', `/projects/${projectId}/bids`, data),
+    update: (projectId: string, bidId: string, data: unknown) =>
+      req('PUT', `/projects/${projectId}/bids/${bidId}`, data),
+    delete: (projectId: string, bidId: string) =>
+      req('DELETE', `/projects/${projectId}/bids/${bidId}`),
+    approve: (projectId: string, bidId: string) =>
+      req('PUT', `/projects/${projectId}/bids/${bidId}/approve`),
+    reject: (projectId: string, bidId: string) =>
+      req('PUT', `/projects/${projectId}/bids/${bidId}/reject`),
+  },
+  changeOrders: {
+    list: (projectId: string) => req('GET', `/projects/${projectId}/change-orders`),
+    create: (projectId: string, data: unknown) => req('POST', `/projects/${projectId}/change-orders`, data),
+    update: (projectId: string, coId: string, data: unknown) =>
+      req('PUT', `/projects/${projectId}/change-orders/${coId}`, data),
+    delete: (projectId: string, coId: string) =>
+      req('DELETE', `/projects/${projectId}/change-orders/${coId}`),
+    approve: (projectId: string, coId: string) =>
+      req('PUT', `/projects/${projectId}/change-orders/${coId}/approve`),
+    reject: (projectId: string, coId: string) =>
+      req('PUT', `/projects/${projectId}/change-orders/${coId}/reject`),
+  },
+  contractor: {
+    generateLink: (projectId: string, vendorId: string, data?: unknown) =>
+      req('POST', `/projects/${projectId}/vendors/${vendorId}/portal-link`, data ?? {}),
+    listLinks: (projectId: string, vendorId: string) =>
+      req('GET', `/projects/${projectId}/vendors/${vendorId}/portal-links`),
+    revokeLink: (tokenId: string) => req('DELETE', `/contractor-tokens/${tokenId}`),
+    // Public portal (no auth needed — use fetch directly in ContractorPortal)
+    getPortal: (token: string) => req('GET', `/contractor/${token}`),
+    updatePhase: (token: string, phaseId: string, data: unknown) =>
+      req('PUT', `/contractor/${token}/phases/${phaseId}`, data),
+    submitPayRequest: (token: string, data: unknown) =>
+      req('POST', `/contractor/${token}/pay-request`, data),
+  },
 };
 
 export function fmt(amount: number): string {

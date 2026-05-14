@@ -70,9 +70,15 @@ export interface Vendor {
   phone: string;
   email: string;
   specialty: string;
+  trade_category: string;
   rating: number;
   hourly_rate: number;
   notes: string;
+  license_number: string;
+  license_state: string;
+  insurance_expiry: string;
+  w9_status: 'missing' | 'pending' | 'received';
+  do_not_rehire: number;
   created_at: string;
 }
 

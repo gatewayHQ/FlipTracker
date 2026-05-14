@@ -113,6 +113,47 @@ export async function initializeSchema(): Promise<void> {
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     )
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS bids (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      vendor_id TEXT NOT NULL,
+      phase_name TEXT DEFAULT '',
+      scope_description TEXT DEFAULT '',
+      amount NUMERIC NOT NULL DEFAULT 0,
+      submitted_date TEXT DEFAULT '',
+      status TEXT DEFAULT 'pending',
+      notes TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS change_orders (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      vendor_id TEXT NOT NULL,
+      phase_name TEXT DEFAULT '',
+      description TEXT NOT NULL,
+      amount NUMERIC NOT NULL DEFAULT 0,
+      submitted_date TEXT DEFAULT '',
+      approved_date TEXT DEFAULT '',
+      status TEXT DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+    )
+  `;
+
+  // Safe column additions for vendor compliance (idempotent)
+  await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS license_number TEXT DEFAULT ''`;
+  await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS license_state TEXT DEFAULT ''`;
+  await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS insurance_expiry TEXT DEFAULT ''`;
+  await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS w9_status TEXT DEFAULT 'missing'`;
+  await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS do_not_rehire INTEGER DEFAULT 0`;
+  await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS trade_category TEXT DEFAULT ''`;
+
   await seedData();
 }
 

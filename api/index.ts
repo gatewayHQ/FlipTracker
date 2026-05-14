@@ -12,6 +12,12 @@ function ensureSchema(): Promise<void> {
 }
 
 export default async function handler(req: any, res: any): Promise<void> {
-  await ensureSchema();
+  try {
+    await ensureSchema();
+  } catch (err: any) {
+    console.error('[schema init]', err);
+    res.status(500).json({ error: 'Database initialization failed', detail: err?.message });
+    return;
+  }
   app(req, res);
 }

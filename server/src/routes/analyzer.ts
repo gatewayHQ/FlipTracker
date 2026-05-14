@@ -5,6 +5,28 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
+router.get('/debug', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const tableCheck = await sql`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name IN ('deal_analyses','users','projects')
+    `;
+    const allRows = await sql`SELECT id, user_id, name, created_at FROM deal_analyses ORDER BY created_at DESC LIMIT 20`;
+    const userRows = await sql`SELECT id, user_id, name, created_at FROM deal_analyses WHERE user_id = ${req.userId}`;
+    res.json({
+      requestUserId: req.userId,
+      tables: tableCheck.map((t: any) => t.table_name),
+      totalRows: allRows.length,
+      rowsForUser: userRows.length,
+      allRows,
+      userRows,
+    });
+  } catch (err: any) {
+    console.error('[analyzer debug]', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
+
 router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const analyses = await sql`
@@ -12,8 +34,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
       ORDER BY created_at DESC
     `;
     res.json(analyses);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch analyses' });
+  } catch (err: any) {
+    console.error('[analyzer list]', err);
+    res.status(500).json({ error: 'Failed to fetch analyses', detail: err?.message });
   }
 });
 
@@ -39,8 +62,9 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
       RETURNING *
     `;
     res.status(201).json(analysis);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to save analysis' });
+  } catch (err: any) {
+    console.error('[analyzer create]', err);
+    res.status(500).json({ error: 'Failed to save analysis', detail: err?.message });
   }
 });
 
@@ -68,8 +92,9 @@ router.put('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
       RETURNING *
     `;
     res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to update analysis' });
+  } catch (err: any) {
+    console.error('[analyzer update]', err);
+    res.status(500).json({ error: 'Failed to update analysis', detail: err?.message });
   }
 });
 
@@ -77,8 +102,9 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     await sql`DELETE FROM deal_analyses WHERE id = ${req.params.id} AND user_id = ${req.userId}`;
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete analysis' });
+  } catch (err: any) {
+    console.error('[analyzer delete]', err);
+    res.status(500).json({ error: 'Failed to delete analysis', detail: err?.message });
   }
 });
 

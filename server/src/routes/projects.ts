@@ -24,8 +24,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
       return { ...p, phase_count: phases.length, completed_phases: completedPhases, progress, total_investment: totalInvestment, est_profit: estProfit };
     });
     res.json(enriched);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch projects' });
+  } catch (err: any) {
+    console.error('[projects list]', err);
+    res.status(500).json({ error: 'Failed to fetch projects', detail: err?.message });
   }
 });
 
@@ -52,8 +53,9 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
       )
     );
     res.status(201).json(project);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to create project' });
+  } catch (err: any) {
+    console.error('[projects create]', err);
+    res.status(500).json({ error: 'Failed to create project', detail: err?.message });
   }
 });
 

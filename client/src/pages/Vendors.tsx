@@ -1,17 +1,40 @@
 import { useState, useEffect } from 'react';
-import { Plus, Star, Phone, Mail, X, ChevronDown, ChevronUp, Search, Wrench } from 'lucide-react';
-import { api } from '../lib/api';
+import { Plus, Star, Phone, Mail, X, ChevronDown, ChevronUp, Search, Wrench, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react';
+import { api, daysUntil } from '../lib/api';
 import type { Vendor } from '../types';
 
 type FormData = {
   name: string; company: string; phone: string; email: string;
   specialty: string; rating: string; hourly_rate: string; notes: string;
+  license_number: string; license_expiry: string; insurance_expiry: string; w9_on_file: boolean;
 };
 
 const INITIAL_FORM: FormData = {
   name: '', company: '', phone: '', email: '',
   specialty: '', rating: '5', hourly_rate: '', notes: '',
+  license_number: '', license_expiry: '', insurance_expiry: '', w9_on_file: false,
 };
+
+function expiryStatus(dateStr: string): 'ok' | 'soon' | 'expired' | 'none' {
+  if (!dateStr) return 'none';
+  const d = daysUntil(dateStr);
+  if (d < 0) return 'expired';
+  if (d <= 60) return 'soon';
+  return 'ok';
+}
+
+function ExpiryBadge({ label, date }: { label: string; date: string }) {
+  const status = expiryStatus(date);
+  if (status === 'none') return null;
+  const colors = { ok: 'text-green-400', soon: 'text-yellow-400', expired: 'text-red-400' };
+  const Icon = status === 'ok' ? ShieldCheck : status === 'soon' ? ShieldAlert : ShieldX;
+  return (
+    <div className={`flex items-center gap-1 text-xs ${colors[status]}`}>
+      <Icon size={12} />
+      <span>{label}: {date}</span>
+    </div>
+  );
+}
 
 const SPECIALTIES = [
   'General Contractor', 'Electrical', 'Plumbing', 'HVAC', 'Roofing',
@@ -64,6 +87,8 @@ export default function Vendors() {
     setForm({
       name: v.name, company: v.company, phone: v.phone, email: v.email,
       specialty: v.specialty, rating: String(v.rating), hourly_rate: String(v.hourly_rate || ''), notes: v.notes,
+      license_number: v.license_number || '', license_expiry: v.license_expiry || '',
+      insurance_expiry: v.insurance_expiry || '', w9_on_file: !!v.w9_on_file,
     });
     setEditingId(v.id);
     setShowForm(true);
@@ -73,7 +98,12 @@ export default function Vendors() {
     e.preventDefault();
     if (!form.name.trim()) return;
     setSaving(true);
-    const payload = { ...form, rating: parseInt(form.rating) || 5, hourly_rate: parseFloat(form.hourly_rate) || 0 };
+    const payload = {
+      ...form,
+      rating: parseInt(form.rating) || 5,
+      hourly_rate: parseFloat(form.hourly_rate) || 0,
+      w9_on_file: form.w9_on_file ? 1 : 0,
+    };
     if (editingId) {
       await api.vendors.update(editingId, payload);
     } else {
@@ -195,6 +225,19 @@ export default function Vendors() {
                     <p className="text-xs text-gray-400">Rate: <span className="text-white font-semibold">${v.hourly_rate}/hr</span></p>
                   )}
                   {v.notes && <p className="text-xs text-gray-400 italic">{v.notes}</p>}
+                  {(v.license_number || v.license_expiry || v.insurance_expiry || v.w9_on_file) && (
+                    <div className="pt-2 space-y-1 border-t border-surface-400/20">
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wider">Compliance</p>
+                      {v.license_number && <p className="text-xs text-gray-400">License: <span className="text-white">{v.license_number}</span></p>}
+                      <ExpiryBadge label="License Exp." date={v.license_expiry} />
+                      <ExpiryBadge label="Insurance Exp." date={v.insurance_expiry} />
+                      {v.w9_on_file ? (
+                        <div className="flex items-center gap-1 text-xs text-green-400"><ShieldCheck size={12} /><span>W-9 on file</span></div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-xs text-yellow-400"><ShieldAlert size={12} /><span>W-9 missing</span></div>
+                      )}
+                    </div>
+                  )}
                   <div className="flex gap-2 pt-2">
                     <button onClick={() => openEdit(v)} className="flex-1 py-2 rounded-lg bg-surface-500 text-white text-xs font-semibold">
                       Edit
@@ -258,6 +301,37 @@ export default function Vendors() {
                 <label className="label">Notes</label>
                 <textarea name="notes" value={form.notes} onChange={handleChange} rows={2} placeholder="Reliable, fast, quality work..." className="input-field resize-none" />
               </div>
+
+              <div className="pt-2 border-t border-surface-400/20">
+                <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Compliance</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="label">License Number</label>
+                    <input name="license_number" value={form.license_number} onChange={handleChange} placeholder="CGC-012345" className="input-field" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label">License Expiry</label>
+                      <input name="license_expiry" value={form.license_expiry} onChange={handleChange} className="input-field" type="date" />
+                    </div>
+                    <div>
+                      <label className="label">Insurance Expiry</label>
+                      <input name="insurance_expiry" value={form.insurance_expiry} onChange={handleChange} className="input-field" type="date" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2 px-4 rounded-xl bg-surface-600">
+                    <span className="text-sm text-white">W-9 on File</span>
+                    <button
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, w9_on_file: !p.w9_on_file }))}
+                      className={`w-12 h-6 rounded-full transition-colors relative ${form.w9_on_file ? 'bg-brand' : 'bg-surface-400'}`}
+                    >
+                      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.w9_on_file ? 'left-7' : 'left-1'}`} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <button type="submit" disabled={saving} className="btn-primary rounded-xl py-4">
                 {saving ? 'Saving...' : editingId ? 'Update Vendor' : 'Add Vendor'}
               </button>

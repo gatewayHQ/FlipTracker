@@ -1,10 +1,11 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import sql from '../db/connection';
+import { requireAuth, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/:projectId/phases', async (req, res) => {
+router.get('/:projectId/phases', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     res.json(await sql`SELECT * FROM renovation_phases WHERE project_id = ${req.params.projectId} ORDER BY created_at`);
   } catch (err) {
@@ -12,7 +13,7 @@ router.get('/:projectId/phases', async (req, res) => {
   }
 });
 
-router.post('/:projectId/phases', async (req, res) => {
+router.post('/:projectId/phases', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const id = uuid();
     const { phase_name, status = 'pending', budget = 0, actual_cost = 0, start_date = '', target_date = '', end_date = '', notes = '' } = req.body;
@@ -27,7 +28,7 @@ router.post('/:projectId/phases', async (req, res) => {
   }
 });
 
-router.put('/:projectId/phases/:phaseId', async (req, res) => {
+router.put('/:projectId/phases/:phaseId', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const rows = await sql`SELECT * FROM renovation_phases WHERE id = ${req.params.phaseId} AND project_id = ${req.params.projectId}`;
     const e = rows[0] as any;
@@ -52,7 +53,7 @@ router.put('/:projectId/phases/:phaseId', async (req, res) => {
   }
 });
 
-router.delete('/:projectId/phases/:phaseId', async (req, res) => {
+router.delete('/:projectId/phases/:phaseId', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     await sql`DELETE FROM renovation_phases WHERE id = ${req.params.phaseId} AND project_id = ${req.params.projectId}`;
     res.json({ success: true });

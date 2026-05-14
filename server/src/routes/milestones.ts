@@ -1,10 +1,11 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import sql from '../db/connection';
+import { requireAuth, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/:projectId/milestones', async (req, res) => {
+router.get('/:projectId/milestones', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     res.json(await sql`SELECT * FROM milestones WHERE project_id = ${req.params.projectId} ORDER BY due_date`);
   } catch (err) {
@@ -12,7 +13,7 @@ router.get('/:projectId/milestones', async (req, res) => {
   }
 });
 
-router.post('/:projectId/milestones', async (req, res) => {
+router.post('/:projectId/milestones', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const id = uuid();
     const { title, due_date = '', completed = 0, completed_date = '', notes = '' } = req.body;
@@ -27,7 +28,7 @@ router.post('/:projectId/milestones', async (req, res) => {
   }
 });
 
-router.put('/:projectId/milestones/:milestoneId', async (req, res) => {
+router.put('/:projectId/milestones/:milestoneId', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const rows = await sql`SELECT * FROM milestones WHERE id = ${req.params.milestoneId} AND project_id = ${req.params.projectId}`;
     const e = rows[0] as any;
@@ -49,7 +50,7 @@ router.put('/:projectId/milestones/:milestoneId', async (req, res) => {
   }
 });
 
-router.delete('/:projectId/milestones/:milestoneId', async (req, res) => {
+router.delete('/:projectId/milestones/:milestoneId', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     await sql`DELETE FROM milestones WHERE id = ${req.params.milestoneId} AND project_id = ${req.params.projectId}`;
     res.json({ success: true });

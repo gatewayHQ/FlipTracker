@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, FolderKanban, Wallet, TrendingUp, Clock, Bell, Search, User } from 'lucide-react';
+import { Plus, FolderKanban, Wallet, TrendingUp, Clock, Bell, Search, User, AlertTriangle, X } from 'lucide-react';
 import StatCard from '../components/StatCard';
 import ProjectCard from '../components/ProjectCard';
-import { api, fmt } from '../lib/api';
+import { api, fmt, daysOverdue } from '../lib/api';
 import type { DashboardData } from '../types';
 
 export default function Portfolio() {
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showAlerts, setShowAlerts] = useState(false);
 
   useEffect(() => {
     api.dashboard.get().then((d) => {
@@ -19,6 +20,7 @@ export default function Portfolio() {
   }, []);
 
   const stats = data?.stats;
+  const overdue = data?.overdueMilestones ?? [];
 
   const quarter = stats && stats.totalProjects > 0 ? '+1 this quarter' : 'No projects yet';
   const roiText = stats ? `${((stats.estTotalProfit / Math.max(stats.capitalDeployed, 1)) * 100).toFixed(1)}% Projected ROI` : '';
@@ -38,8 +40,16 @@ export default function Portfolio() {
           <button onClick={() => navigate('/projects')} className="text-gray-400 hover:text-white transition-colors">
             <Search size={20} />
           </button>
-          <button className="text-gray-400 hover:text-white transition-colors">
-            <Bell size={20} />
+          <button
+            onClick={() => setShowAlerts(p => !p)}
+            className="relative text-gray-400 hover:text-white transition-colors"
+          >
+            <Bell size={20} className={showAlerts ? 'text-brand' : ''} />
+            {overdue.length > 0 && !showAlerts && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold">
+                {overdue.length}
+              </span>
+            )}
           </button>
           <button onClick={() => navigate('/settings')} className="w-8 h-8 rounded-full bg-surface-500 flex items-center justify-center">
             <User size={16} className="text-gray-300" />
@@ -57,6 +67,44 @@ export default function Portfolio() {
           <Plus size={20} className="text-white" />
           <span>NEW PROJECT</span>
         </button>
+
+        {/* Overdue Alerts Panel */}
+        {showAlerts && (
+          <div className="card border border-red-500/30 bg-red-500/5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={16} className="text-red-400" />
+                <h2 className="text-sm font-bold text-red-400">Attention Required</h2>
+              </div>
+              <button onClick={() => setShowAlerts(false)}>
+                <X size={16} className="text-gray-500" />
+              </button>
+            </div>
+            {overdue.length === 0 ? (
+              <p className="text-sm text-gray-400">No overdue milestones. You're on track!</p>
+            ) : (
+              <div className="space-y-2">
+                {overdue.map(m => {
+                  const days = daysOverdue(m.due_date);
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => navigate(`/projects/${m.project_id}`)}
+                      className="w-full text-left flex items-start gap-3 py-2.5 px-3 rounded-xl bg-surface-700 hover:bg-surface-600 transition-colors"
+                    >
+                      <AlertTriangle size={14} className="text-red-400 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-white truncate">{m.title}</p>
+                        <p className="text-[10px] text-gray-400 truncate">{m.project_name}</p>
+                      </div>
+                      <span className="text-[10px] font-bold text-red-400 flex-shrink-0">{days}d overdue</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {loading ? (
           <div className="space-y-4">

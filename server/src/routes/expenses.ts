@@ -1,10 +1,11 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import sql from '../db/connection';
+import { requireAuth, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/:projectId/expenses', async (req, res) => {
+router.get('/:projectId/expenses', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     res.json(await sql`SELECT * FROM expenses WHERE project_id = ${req.params.projectId} ORDER BY date DESC`);
   } catch (err) {
@@ -12,7 +13,7 @@ router.get('/:projectId/expenses', async (req, res) => {
   }
 });
 
-router.post('/:projectId/expenses', async (req, res) => {
+router.post('/:projectId/expenses', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const id = uuid();
     const { category, description, amount, date, vendor_id = '', notes = '' } = req.body;
@@ -27,7 +28,7 @@ router.post('/:projectId/expenses', async (req, res) => {
   }
 });
 
-router.put('/:projectId/expenses/:expenseId', async (req, res) => {
+router.put('/:projectId/expenses/:expenseId', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const rows = await sql`SELECT * FROM expenses WHERE id = ${req.params.expenseId} AND project_id = ${req.params.projectId}`;
     const e = rows[0] as any;
@@ -50,7 +51,7 @@ router.put('/:projectId/expenses/:expenseId', async (req, res) => {
   }
 });
 
-router.delete('/:projectId/expenses/:expenseId', async (req, res) => {
+router.delete('/:projectId/expenses/:expenseId', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     await sql`DELETE FROM expenses WHERE id = ${req.params.expenseId} AND project_id = ${req.params.projectId}`;
     res.json({ success: true });

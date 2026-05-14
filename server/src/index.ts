@@ -1,7 +1,8 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
-import { getDb } from './db/connection';
+import { initializeSchema } from './db/schema';
 import dashboardRouter from './routes/dashboard';
 import projectsRouter from './routes/projects';
 import phasesRouter from './routes/phases';
@@ -14,8 +15,6 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
-
-getDb();
 
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/projects', projectsRouter);
@@ -30,6 +29,14 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(clientDist, 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`Flip Folio server running on http://localhost:${PORT}`);
+async function start() {
+  await initializeSchema();
+  app.listen(PORT, () => {
+    console.log(`Flip Folio server running on http://localhost:${PORT}`);
+  });
+}
+
+start().catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });

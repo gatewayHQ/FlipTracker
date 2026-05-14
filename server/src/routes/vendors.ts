@@ -1,88 +1,105 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
-import { getDb } from '../db/connection';
+import sql from '../db/connection';
 
 const router = Router();
 
-router.get('/', (_req, res) => {
-  const db = getDb();
-  const vendors = db.prepare('SELECT * FROM vendors ORDER BY name').all();
-  res.json(vendors);
-});
-
-router.post('/', (req, res) => {
-  const db = getDb();
-  const id = uuid();
-  const { name, company = '', phone = '', email = '', specialty = '', rating = 0, hourly_rate = 0, notes = '' } = req.body;
-
-  db.prepare(`
-    INSERT INTO vendors VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-  `).run(id, name, company, phone, email, specialty, rating, hourly_rate, notes);
-
-  res.status(201).json(db.prepare('SELECT * FROM vendors WHERE id = ?').get(id));
-});
-
-router.get('/:id', (req, res) => {
-  const db = getDb();
-  const vendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(req.params.id);
-  if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
-
-  const projects = db.prepare(`
-    SELECT pv.*, p.name as project_name, p.address, p.status as project_status
-    FROM project_vendors pv
-    JOIN projects p ON pv.project_id = p.id
-    WHERE pv.vendor_id = ?
-  `).all(req.params.id);
-
-  res.json({ ...vendor as object, projects });
-});
-
-router.put('/:id', (req, res) => {
-  const db = getDb();
-  const existing = db.prepare('SELECT * FROM vendors WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Vendor not found' });
-
-  const fields = ['name', 'company', 'phone', 'email', 'specialty', 'rating', 'hourly_rate', 'notes'];
-  const updates = fields.filter(f => req.body[f] !== undefined).map(f => `${f} = ?`).join(', ');
-  const values = fields.filter(f => req.body[f] !== undefined).map(f => req.body[f]);
-
-  if (updates) {
-    db.prepare(`UPDATE vendors SET ${updates} WHERE id = ?`).run(...values, req.params.id);
+router.get('/', async (_req, res) => {
+  try {
+    res.json(await sql`SELECT * FROM vendors ORDER BY name`);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch vendors' });
   }
-
-  res.json(db.prepare('SELECT * FROM vendors WHERE id = ?').get(req.params.id));
 });
 
-router.delete('/:id', (req, res) => {
-  const db = getDb();
-  db.prepare('DELETE FROM vendors WHERE id = ?').run(req.params.id);
-  res.json({ success: true });
+router.post('/', async (req, res) => {
+  try {
+    const id = uuid();
+    const { name, company = '', phone = '', email = '', specialty = '', rating = 0, hourly_rate = 0, notes = '' } = req.body;
+    const [vendor] = await sql`
+      INSERT INTO vendors (id, name, company, phone, email, specialty, rating, hourly_rate, notes)
+      VALUES (${id}, ${name}, ${company}, ${phone}, ${email}, ${specialty}, ${rating}, ${hourly_rate}, ${notes})
+      RETURNING *
+    `;
+    res.status(201).json(vendor);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create vendor' });
+  }
 });
 
-router.post('/:vendorId/projects/:projectId', (req, res) => {
-  const db = getDb();
-  const id = uuid();
-  const { phase_name = '', contracted_amount = 0, paid_amount = 0, notes = '' } = req.body;
-
-  const existing = db.prepare(
-    'SELECT * FROM project_vendors WHERE vendor_id = ? AND project_id = ?'
-  ).get(req.params.vendorId, req.params.projectId);
-
-  if (existing) return res.status(400).json({ error: 'Vendor already attached to this project' });
-
-  db.prepare(`
-    INSERT INTO project_vendors VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-  `).run(id, req.params.projectId, req.params.vendorId, phase_name, contracted_amount, paid_amount, notes);
-
-  res.status(201).json(db.prepare('SELECT * FROM project_vendors WHERE id = ?').get(id));
+router.get('/:id', async (req, res) => {
+  try {
+    const rows = await sql`SELECT * FROM vendors WHERE id = ${req.params.id}`;
+    if (!rows[0]) return res.status(404).json({ error: 'Vendor not found' });
+    const projects = await sql`
+      SELECT pv.*, p.name as project_name, p.address, p.status as project_status
+      FROM project_vendors pv JOIN projects p ON pv.project_id = p.id
+      WHERE pv.vendor_id = ${req.params.id}
+    `;
+    res.json({ ...rows[0], projects });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch vendor' });
+  }
 });
 
-router.delete('/:vendorId/projects/:projectId', (req, res) => {
-  const db = getDb();
-  db.prepare('DELETE FROM project_vendors WHERE vendor_id = ? AND project_id = ?').run(
-    req.params.vendorId, req.params.projectId
-  );
-  res.json({ success: true });
+router.put('/:id', async (req, res) => {
+  try {
+    const rows = await sql`SELECT * FROM vendors WHERE id = ${req.params.id}`;
+    const e = rows[0] as any;
+    if (!e) return res.status(404).json({ error: 'Vendor not found' });
+    const b = req.body;
+    const [updated] = await sql`
+      UPDATE vendors SET
+        name = ${b.name ?? e.name},
+        company = ${b.company ?? e.company},
+        phone = ${b.phone ?? e.phone},
+        email = ${b.email ?? e.email},
+        specialty = ${b.specialty ?? e.specialty},
+        rating = ${b.rating ?? e.rating},
+        hourly_rate = ${b.hourly_rate ?? e.hourly_rate},
+        notes = ${b.notes ?? e.notes}
+      WHERE id = ${req.params.id}
+      RETURNING *
+    `;
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update vendor' });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    await sql`DELETE FROM vendors WHERE id = ${req.params.id}`;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete vendor' });
+  }
+});
+
+router.post('/:vendorId/projects/:projectId', async (req, res) => {
+  try {
+    const existing = await sql`SELECT id FROM project_vendors WHERE vendor_id = ${req.params.vendorId} AND project_id = ${req.params.projectId}`;
+    if (existing[0]) return res.status(400).json({ error: 'Vendor already attached to this project' });
+    const id = uuid();
+    const { phase_name = '', contracted_amount = 0, paid_amount = 0, notes = '' } = req.body;
+    const [pv] = await sql`
+      INSERT INTO project_vendors (id, project_id, vendor_id, phase_name, contracted_amount, paid_amount, notes)
+      VALUES (${id}, ${req.params.projectId}, ${req.params.vendorId}, ${phase_name}, ${contracted_amount}, ${paid_amount}, ${notes})
+      RETURNING *
+    `;
+    res.status(201).json(pv);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to attach vendor to project' });
+  }
+});
+
+router.delete('/:vendorId/projects/:projectId', async (req, res) => {
+  try {
+    await sql`DELETE FROM project_vendors WHERE vendor_id = ${req.params.vendorId} AND project_id = ${req.params.projectId}`;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to detach vendor' });
+  }
 });
 
 export default router;

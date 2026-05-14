@@ -8,9 +8,22 @@
     "dev:client": "cd client && npm run dev",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
     "build": "cd client && npm run build",
+    "build:vercel": "cd client && npm run build",
     "start": "cd server && npm start"
   },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.18.3",
+    "uuid": "^9.0.1"
+  },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.24",
+    "@types/uuid": "^9.0.8",
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.2"
   }
 }

@@ -122,3 +122,10 @@ export function daysOverdue(dateStr: string): number {
   const today = new Date().setHours(0, 0, 0, 0);
   return Math.max(0, Math.floor((today - due) / (1000 * 60 * 60 * 24)));
 }
+
+export function daysUntil(dateStr: string): number {
+  if (!dateStr) return Infinity;
+  const target = new Date(dateStr + 'T00:00:00').getTime();
+  const today = new Date().setHours(0, 0, 0, 0);
+  return Math.floor((target - today) / (1000 * 60 * 60 * 24));
+}

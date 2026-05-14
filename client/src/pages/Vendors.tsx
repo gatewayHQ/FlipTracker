@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Star, Phone, Mail, X, ChevronDown, ChevronUp, Search, Wrench, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, daysUntil } from '../lib/api';
 import type { Vendor } from '../types';
 
 type FormData = {
@@ -17,9 +17,9 @@ const INITIAL_FORM: FormData = {
 
 function expiryStatus(dateStr: string): 'ok' | 'soon' | 'expired' | 'none' {
   if (!dateStr) return 'none';
-  const diff = Math.floor((new Date(dateStr + 'T00:00:00').getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  if (diff < 0) return 'expired';
-  if (diff <= 60) return 'soon';
+  const d = daysUntil(dateStr);
+  if (d < 0) return 'expired';
+  if (d <= 60) return 'soon';
   return 'ok';
 }
 

@@ -6,39 +6,30 @@ import { useAuth } from '../context/AuthContext';
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { logout, refreshUser } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const { user, logout, refreshUser } = useAuth();
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingGoals, setSavingGoals] = useState(false);
   const [profileMsg, setProfileMsg] = useState('');
   const [goalsMsg, setGoalsMsg] = useState('');
 
-  // Profile
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-
-  // Preferences
   const [notifications, setNotifications] = useState(true);
-  const [darkMode] = useState(true);
-
-  // Goals
   const [capitalGoal, setCapitalGoal] = useState('');
   const [targetRoi, setTargetRoi] = useState('');
   const [targetFlipDays, setTargetFlipDays] = useState('');
 
   useEffect(() => {
-    api.auth.me().then((data: any) => {
-      setName(data.name || '');
-      setEmail(data.email || '');
-      if (data.settings) {
-        setNotifications(!!data.settings.notifications_enabled);
-        setCapitalGoal(data.settings.capital_goal ? String(data.settings.capital_goal) : '');
-        setTargetRoi(data.settings.target_roi ? String(data.settings.target_roi) : '');
-        setTargetFlipDays(data.settings.target_flip_days ? String(data.settings.target_flip_days) : '');
-      }
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
+    if (!user) return;
+    setName(user.name || '');
+    setEmail(user.email || '');
+    if (user.settings) {
+      setNotifications(!!user.settings.notifications_enabled);
+      setCapitalGoal(user.settings.capital_goal ? String(user.settings.capital_goal) : '');
+      setTargetRoi(user.settings.target_roi ? String(user.settings.target_roi) : '');
+      setTargetFlipDays(user.settings.target_flip_days ? String(user.settings.target_flip_days) : '');
+    }
+  }, [user]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,12 +85,7 @@ export default function Settings() {
       </div>
 
       <div className="px-5 pb-8 space-y-5">
-        {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map(i => <div key={i} className="card h-24 animate-pulse" />)}
-          </div>
-        ) : (
-          <>
+        <>
             {/* Profile */}
             <form onSubmit={handleSaveProfile} className="card space-y-4">
               <div className="flex items-center gap-3 mb-2">
@@ -252,8 +238,7 @@ export default function Settings() {
               <p className="text-xs text-gray-600">Real Estate Investment Tracker</p>
               <p className="text-xs text-gray-600 mt-1">Built for serious investors</p>
             </div>
-          </>
-        )}
+        </>
       </div>
     </div>
   );

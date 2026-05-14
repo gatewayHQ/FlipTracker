@@ -109,24 +109,15 @@ router.put('/settings', requireAuth, async (req: AuthRequest, res: Response) => 
   try {
     const { capital_goal = 0, target_roi = 15, target_flip_days = 90, notifications_enabled = 1 } = req.body;
 
-    const existing = await sql`SELECT id FROM user_settings WHERE user_id = ${req.userId}`;
-    if (existing.length > 0) {
-      const [settings] = await sql`
-        UPDATE user_settings SET
-          capital_goal = ${capital_goal},
-          target_roi = ${target_roi},
-          target_flip_days = ${target_flip_days},
-          notifications_enabled = ${notifications_enabled},
-          updated_at = NOW()
-        WHERE user_id = ${req.userId}
-        RETURNING *
-      `;
-      return res.json(settings);
-    }
-
     const [settings] = await sql`
       INSERT INTO user_settings (id, user_id, capital_goal, target_roi, target_flip_days, notifications_enabled)
       VALUES (${uuid()}, ${req.userId}, ${capital_goal}, ${target_roi}, ${target_flip_days}, ${notifications_enabled})
+      ON CONFLICT (user_id) DO UPDATE SET
+        capital_goal = EXCLUDED.capital_goal,
+        target_roi = EXCLUDED.target_roi,
+        target_flip_days = EXCLUDED.target_flip_days,
+        notifications_enabled = EXCLUDED.notifications_enabled,
+        updated_at = NOW()
       RETURNING *
     `;
     res.json(settings);

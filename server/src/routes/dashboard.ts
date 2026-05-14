@@ -38,9 +38,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
       avgDaysToFlip = 0;
     }
 
-    // Overdue milestones across all user projects
     const today = new Date().toISOString().slice(0, 10);
-    const overdueMilestones = await sql`
+    // Fetch without LIMIT so health computation sees all overdue milestones, not just UI top-5
+    const allOverdue = await sql`
       SELECT m.id, m.title, m.due_date, m.project_id, p.name as project_name, p.address
       FROM milestones m
       JOIN projects p ON m.project_id = p.id
@@ -49,8 +49,8 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
         AND m.due_date != ''
         AND m.due_date < ${today}
       ORDER BY m.due_date ASC
-      LIMIT 5
     `;
+    const overdueMilestones = (allOverdue as any[]).slice(0, 5);
 
     const recentProjectIds = [...projects]
       .sort((a, b) => new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime())
@@ -58,28 +58,25 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
       .slice(0, 5)
       .map(p => p.id);
 
-    const recentProjects = await Promise.all(
-      recentProjectIds.map(async (id) => {
-        const p = projects.find(pr => pr.id === id)!;
-        const phases = await sql`SELECT status FROM renovation_phases WHERE project_id = ${id}`;
-        const completedPhases = phases.filter(ph => ph.status === 'completed').length;
-        const progress = phases.length > 0 ? Math.round((completedPhases / phases.length) * 100) : 0;
+    const allRecentPhases = recentProjectIds.length > 0
+      ? await sql`SELECT project_id, status FROM renovation_phases WHERE project_id IN ${sql(recentProjectIds)}`
+      : [];
 
-        // Compute health: over_budget | at_risk | on_track
-        const rehabSpent = Number(p.labor_cost) + Number(p.materials_cost);
-        const budget = Number(p.rehab_budget);
-        const overdueMsCount = await sql`
-          SELECT COUNT(*) as c FROM milestones
-          WHERE project_id = ${id} AND completed = 0 AND due_date != '' AND due_date < ${today}
-        `;
-        const isOverBudget = budget > 0 && rehabSpent > budget;
-        const isAtRisk = budget > 0 && rehabSpent / budget > 0.9;
-        const hasOverdue = Number((overdueMsCount[0] as any).c) > 0;
-        const health = isOverBudget || hasOverdue ? 'over_budget' : isAtRisk ? 'at_risk' : 'on_track';
+    const recentProjects = recentProjectIds.map((id) => {
+      const p = projects.find(pr => pr.id === id)!;
+      const phases = allRecentPhases.filter(ph => ph.project_id === id);
+      const completedPhases = phases.filter(ph => ph.status === 'completed').length;
+      const progress = phases.length > 0 ? Math.round((completedPhases / phases.length) * 100) : 0;
 
-        return { ...p, phase_count: phases.length, completed_phases: completedPhases, progress, health };
-      })
-    );
+      const rehabSpent = Number(p.labor_cost) + Number(p.materials_cost);
+      const budget = Number(p.rehab_budget);
+      const hasOverdue = (allOverdue as any[]).some((m: any) => m.project_id === id);
+      const isOverBudget = budget > 0 && rehabSpent > budget;
+      const isAtRisk = budget > 0 && rehabSpent / budget > 0.9;
+      const health = isOverBudget || hasOverdue ? 'over_budget' : isAtRisk ? 'at_risk' : 'on_track';
+
+      return { ...p, phase_count: phases.length, completed_phases: completedPhases, progress, health };
+    });
 
     res.json({
       stats: {

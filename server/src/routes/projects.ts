@@ -8,8 +8,12 @@ const router = Router();
 router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const projects = await sql`SELECT * FROM projects WHERE user_id = ${req.userId} ORDER BY created_at DESC`;
-    const enriched = await Promise.all(projects.map(async (p: any) => {
-      const phases = await sql`SELECT status FROM renovation_phases WHERE project_id = ${p.id}`;
+    const projectIds = projects.map((p: any) => p.id);
+    const allPhases = projectIds.length > 0
+      ? await sql`SELECT project_id, status FROM renovation_phases WHERE project_id IN ${sql(projectIds)}`
+      : [];
+    const enriched = projects.map((p: any) => {
+      const phases = allPhases.filter((ph: any) => ph.project_id === p.id);
       const completedPhases = phases.filter((ph: any) => ph.status === 'completed').length;
       const progress = phases.length > 0 ? Math.round((completedPhases / phases.length) * 100) : 0;
       const totalInvestment = Number(p.purchase_price) + Number(p.legal_fees) + Number(p.inspection_cost) + Number(p.closing_costs);
@@ -18,7 +22,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
       const salePrice = Number(p.actual_sale_price) > 0 ? Number(p.actual_sale_price) : Number(p.estimated_sale_price);
       const estProfit = salePrice - totalInvestment - rehabSpent - holdingTotal;
       return { ...p, phase_count: phases.length, completed_phases: completedPhases, progress, total_investment: totalInvestment, est_profit: estProfit };
-    }));
+    });
     res.json(enriched);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch projects' });
@@ -42,9 +46,11 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
       VALUES (${id}, ${req.userId}, ${name}, ${address}, ${city}, ${state}, ${zip}, ${status}, ${purchase_price}, ${legal_fees}, ${inspection_cost}, ${closing_costs}, ${rehab_budget}, ${labor_cost}, ${materials_cost}, ${holding_costs_monthly}, ${estimated_sale_price}, ${actual_sale_price}, ${acquisition_date}, ${target_completion_date}, ${actual_completion_date}, ${listed_date}, ${sold_date}, ${notes})
       RETURNING *
     `;
-    for (const phaseName of phases as string[]) {
-      await sql`INSERT INTO renovation_phases (id, project_id, phase_name) VALUES (${uuid()}, ${id}, ${phaseName})`;
-    }
+    await Promise.all(
+      (phases as string[]).map(phaseName =>
+        sql`INSERT INTO renovation_phases (id, project_id, phase_name) VALUES (${uuid()}, ${id}, ${phaseName})`
+      )
+    );
     res.status(201).json(project);
   } catch (err) {
     res.status(500).json({ error: 'Failed to create project' });
@@ -131,9 +137,8 @@ router.put('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
 
 router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const rows = await sql`SELECT id FROM projects WHERE id = ${req.params.id} AND user_id = ${req.userId}`;
+    const rows = await sql`DELETE FROM projects WHERE id = ${req.params.id} AND user_id = ${req.userId} RETURNING id`;
     if (!rows[0]) return res.status(404).json({ error: 'Project not found' });
-    await sql`DELETE FROM projects WHERE id = ${req.params.id}`;
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete project' });

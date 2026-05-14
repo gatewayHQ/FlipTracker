@@ -43,12 +43,16 @@ export default function Analyzer() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     api.analyzer.list().then(data => {
       setAnalyses(data as DealAnalysis[]);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((err: Error) => {
+      setErrorMsg(err.message || 'Failed to load analyses');
+      setLoading(false);
+    });
   }, []);
 
   const calc = useMemo(() => {
@@ -105,8 +109,8 @@ export default function Analyzer() {
 
   async function handleSave() {
     const payload = {
-      name: form.name || null,
-      address: form.address || null,
+      name: form.name || '',
+      address: form.address || '',
       purchase_price: n(form.purchase_price),
       arv: n(form.arv),
       repair_cost: n(form.repair_cost),
@@ -115,10 +119,11 @@ export default function Analyzer() {
       financing_cost: n(form.financing_cost),
       agent_commission_pct: n(form.agent_commission_pct),
       closing_cost_pct: n(form.closing_cost_pct),
-      notes: form.notes || null,
+      notes: form.notes || '',
     };
 
     setSaving(true);
+    setErrorMsg(null);
     try {
       if (editingId) {
         const updated = await api.analyzer.update(editingId, payload) as DealAnalysis;
@@ -128,6 +133,8 @@ export default function Analyzer() {
         setAnalyses(prev => [created, ...prev]);
       }
       resetForm();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -161,6 +168,19 @@ export default function Analyzer() {
       </div>
 
       <div className="px-5 pb-8 space-y-4">
+        {errorMsg && (
+          <div className="bg-red-500/15 border border-red-500/30 rounded-xl px-4 py-3 flex items-start gap-3">
+            <XCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-400 font-semibold">Error</p>
+              <p className="text-xs text-red-300 mt-0.5">{errorMsg}</p>
+            </div>
+            <button onClick={() => setErrorMsg(null)} className="text-red-400/60 hover:text-red-400">
+              <XCircle size={14} />
+            </button>
+          </div>
+        )}
+
         {/* Calculator Card */}
         <div className="card space-y-4">
           <div className="flex items-center gap-2">

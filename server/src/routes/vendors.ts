@@ -15,10 +15,15 @@ router.get('/', async (_req, res) => {
 router.post('/', async (req, res) => {
   try {
     const id = uuid();
-    const { name, company = '', phone = '', email = '', specialty = '', rating = 0, hourly_rate = 0, notes = '' } = req.body;
+    const {
+      name, company = '', phone = '', email = '', specialty = '', trade_category = '',
+      rating = 0, hourly_rate = 0, notes = '',
+      license_number = '', license_state = '', insurance_expiry = '',
+      w9_status = 'missing', do_not_rehire = 0,
+    } = req.body;
     const [vendor] = await sql`
-      INSERT INTO vendors (id, name, company, phone, email, specialty, rating, hourly_rate, notes)
-      VALUES (${id}, ${name}, ${company}, ${phone}, ${email}, ${specialty}, ${rating}, ${hourly_rate}, ${notes})
+      INSERT INTO vendors (id, name, company, phone, email, specialty, trade_category, rating, hourly_rate, notes, license_number, license_state, insurance_expiry, w9_status, do_not_rehire)
+      VALUES (${id}, ${name}, ${company}, ${phone}, ${email}, ${specialty}, ${trade_category}, ${rating}, ${hourly_rate}, ${notes}, ${license_number}, ${license_state}, ${insurance_expiry}, ${w9_status}, ${do_not_rehire})
       RETURNING *
     `;
     res.status(201).json(vendor);
@@ -55,9 +60,15 @@ router.put('/:id', async (req, res) => {
         phone = ${b.phone ?? e.phone},
         email = ${b.email ?? e.email},
         specialty = ${b.specialty ?? e.specialty},
+        trade_category = ${b.trade_category ?? e.trade_category ?? ''},
         rating = ${b.rating ?? e.rating},
         hourly_rate = ${b.hourly_rate ?? e.hourly_rate},
-        notes = ${b.notes ?? e.notes}
+        notes = ${b.notes ?? e.notes},
+        license_number = ${b.license_number ?? e.license_number ?? ''},
+        license_state = ${b.license_state ?? e.license_state ?? ''},
+        insurance_expiry = ${b.insurance_expiry ?? e.insurance_expiry ?? ''},
+        w9_status = ${b.w9_status ?? e.w9_status ?? 'missing'},
+        do_not_rehire = ${b.do_not_rehire ?? e.do_not_rehire ?? 0}
       WHERE id = ${req.params.id}
       RETURNING *
     `;

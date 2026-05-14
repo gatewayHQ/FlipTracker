@@ -1,50 +1,62 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
-import { getDb } from '../db/connection';
+import sql from '../db/connection';
 
 const router = Router();
 
-router.get('/:projectId/expenses', (req, res) => {
-  const db = getDb();
-  const expenses = db.prepare(
-    'SELECT * FROM expenses WHERE project_id = ? ORDER BY date DESC'
-  ).all(req.params.projectId);
-  res.json(expenses);
-});
-
-router.post('/:projectId/expenses', (req, res) => {
-  const db = getDb();
-  const id = uuid();
-  const { category, description, amount, date, vendor_id = '', notes = '' } = req.body;
-
-  db.prepare(`
-    INSERT INTO expenses VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-  `).run(id, req.params.projectId, category, description, amount, date, vendor_id, notes);
-
-  res.status(201).json(db.prepare('SELECT * FROM expenses WHERE id = ?').get(id));
-});
-
-router.put('/:projectId/expenses/:expenseId', (req, res) => {
-  const db = getDb();
-  const fields = ['category', 'description', 'amount', 'date', 'vendor_id', 'notes'];
-  const updates = fields.filter(f => req.body[f] !== undefined).map(f => `${f} = ?`).join(', ');
-  const values = fields.filter(f => req.body[f] !== undefined).map(f => req.body[f]);
-
-  if (updates) {
-    db.prepare(`UPDATE expenses SET ${updates} WHERE id = ? AND project_id = ?`).run(
-      ...values, req.params.expenseId, req.params.projectId
-    );
+router.get('/:projectId/expenses', async (req, res) => {
+  try {
+    res.json(await sql`SELECT * FROM expenses WHERE project_id = ${req.params.projectId} ORDER BY date DESC`);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch expenses' });
   }
-
-  res.json(db.prepare('SELECT * FROM expenses WHERE id = ?').get(req.params.expenseId));
 });
 
-router.delete('/:projectId/expenses/:expenseId', (req, res) => {
-  const db = getDb();
-  db.prepare('DELETE FROM expenses WHERE id = ? AND project_id = ?').run(
-    req.params.expenseId, req.params.projectId
-  );
-  res.json({ success: true });
+router.post('/:projectId/expenses', async (req, res) => {
+  try {
+    const id = uuid();
+    const { category, description, amount, date, vendor_id = '', notes = '' } = req.body;
+    const [expense] = await sql`
+      INSERT INTO expenses (id, project_id, category, description, amount, date, vendor_id, notes)
+      VALUES (${id}, ${req.params.projectId}, ${category}, ${description}, ${amount}, ${date}, ${vendor_id}, ${notes})
+      RETURNING *
+    `;
+    res.status(201).json(expense);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create expense' });
+  }
+});
+
+router.put('/:projectId/expenses/:expenseId', async (req, res) => {
+  try {
+    const rows = await sql`SELECT * FROM expenses WHERE id = ${req.params.expenseId} AND project_id = ${req.params.projectId}`;
+    const e = rows[0] as any;
+    if (!e) return res.status(404).json({ error: 'Expense not found' });
+    const b = req.body;
+    const [updated] = await sql`
+      UPDATE expenses SET
+        category = ${b.category ?? e.category},
+        description = ${b.description ?? e.description},
+        amount = ${b.amount ?? e.amount},
+        date = ${b.date ?? e.date},
+        vendor_id = ${b.vendor_id ?? e.vendor_id},
+        notes = ${b.notes ?? e.notes}
+      WHERE id = ${req.params.expenseId} AND project_id = ${req.params.projectId}
+      RETURNING *
+    `;
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update expense' });
+  }
+});
+
+router.delete('/:projectId/expenses/:expenseId', async (req, res) => {
+  try {
+    await sql`DELETE FROM expenses WHERE id = ${req.params.expenseId} AND project_id = ${req.params.projectId}`;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete expense' });
+  }
 });
 
 export default router;

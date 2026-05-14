@@ -1,138 +1,130 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
-import { getDb } from '../db/connection';
+import sql from '../db/connection';
 
 const router = Router();
 
-router.get('/', (_req, res) => {
-  const db = getDb();
-  const projects = db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all() as any[];
-
-  const enriched = projects.map(p => {
-    const phases = db.prepare('SELECT * FROM renovation_phases WHERE project_id = ?').all(p.id) as any[];
-    const completedPhases = phases.filter((ph: any) => ph.status === 'completed').length;
-    const progress = phases.length > 0 ? Math.round((completedPhases / phases.length) * 100) : 0;
-    const totalInvestment = p.purchase_price + p.legal_fees + p.inspection_cost + p.closing_costs;
-    const totalExpenses = p.labor_cost + p.materials_cost + (p.holding_costs_monthly * 6);
-    const salePrice = p.actual_sale_price > 0 ? p.actual_sale_price : p.estimated_sale_price;
-    const estProfit = salePrice - totalInvestment - totalExpenses - p.rehab_budget;
-    return { ...p, phase_count: phases.length, completed_phases: completedPhases, progress, total_investment: totalInvestment, est_profit: estProfit };
-  });
-
-  res.json(enriched);
-});
-
-router.post('/', (req, res) => {
-  const db = getDb();
-  const id = uuid();
-  const {
-    name, address, city, state, zip = '', status = 'acquired',
-    purchase_price = 0, legal_fees = 0, inspection_cost = 0, closing_costs = 0,
-    rehab_budget = 0, labor_cost = 0, materials_cost = 0, holding_costs_monthly = 0,
-    estimated_sale_price = 0, actual_sale_price = 0,
-    acquisition_date = '', target_completion_date = '', actual_completion_date = '',
-    listed_date = '', sold_date = '', notes = '',
-    phases = [],
-  } = req.body;
-
-  db.prepare(`
-    INSERT INTO projects VALUES (
-      ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?,
-      ?, ?, ?, ?, ?,
-      ?, datetime('now'), datetime('now')
-    )
-  `).run(
-    id, name, address, city, state, zip, status,
-    purchase_price, legal_fees, inspection_cost, closing_costs,
-    rehab_budget, labor_cost, materials_cost, holding_costs_monthly,
-    estimated_sale_price, actual_sale_price,
-    acquisition_date, target_completion_date, actual_completion_date, listed_date, sold_date,
-    notes
-  );
-
-  for (const phaseName of phases as string[]) {
-    db.prepare(`INSERT INTO renovation_phases VALUES (?, ?, ?, 'pending', 0, 0, '', '', '', '', datetime('now'))`).run(
-      uuid(), id, phaseName
-    );
+router.get('/', async (_req, res) => {
+  try {
+    const projects = await sql`SELECT * FROM projects ORDER BY created_at DESC`;
+    const enriched = await Promise.all(projects.map(async (p: any) => {
+      const phases = await sql`SELECT status FROM renovation_phases WHERE project_id = ${p.id}`;
+      const completedPhases = phases.filter((ph: any) => ph.status === 'completed').length;
+      const progress = phases.length > 0 ? Math.round((completedPhases / phases.length) * 100) : 0;
+      const totalInvestment = Number(p.purchase_price) + Number(p.legal_fees) + Number(p.inspection_cost) + Number(p.closing_costs);
+      const totalExpenses = Number(p.labor_cost) + Number(p.materials_cost) + (Number(p.holding_costs_monthly) * 6);
+      const salePrice = Number(p.actual_sale_price) > 0 ? Number(p.actual_sale_price) : Number(p.estimated_sale_price);
+      const estProfit = salePrice - totalInvestment - totalExpenses - Number(p.rehab_budget);
+      return { ...p, phase_count: phases.length, completed_phases: completedPhases, progress, total_investment: totalInvestment, est_profit: estProfit };
+    }));
+    res.json(enriched);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch projects' });
   }
-
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
-  res.status(201).json(project);
 });
 
-router.get('/:id', (req, res) => {
-  const db = getDb();
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id) as any;
-  if (!project) return res.status(404).json({ error: 'Project not found' });
+router.post('/', async (req, res) => {
+  try {
+    const id = uuid();
+    const {
+      name, address, city, state, zip = '', status = 'acquired',
+      purchase_price = 0, legal_fees = 0, inspection_cost = 0, closing_costs = 0,
+      rehab_budget = 0, labor_cost = 0, materials_cost = 0, holding_costs_monthly = 0,
+      estimated_sale_price = 0, actual_sale_price = 0,
+      acquisition_date = '', target_completion_date = '', actual_completion_date = '',
+      listed_date = '', sold_date = '', notes = '', phases = [],
+    } = req.body;
 
-  const phases = db.prepare('SELECT * FROM renovation_phases WHERE project_id = ? ORDER BY created_at').all(req.params.id);
-  const expenses = db.prepare('SELECT * FROM expenses WHERE project_id = ? ORDER BY date DESC').all(req.params.id);
-  const milestones = db.prepare('SELECT * FROM milestones WHERE project_id = ? ORDER BY due_date').all(req.params.id);
-  const projectVendors = db.prepare(`
-    SELECT pv.*, v.name as vendor_name, v.company, v.phone, v.email, v.specialty, v.rating
-    FROM project_vendors pv
-    JOIN vendors v ON pv.vendor_id = v.id
-    WHERE pv.project_id = ?
-  `).all(req.params.id);
-
-  const totalInvestment = project.purchase_price + project.legal_fees + project.inspection_cost + project.closing_costs;
-  const totalExpenses = project.labor_cost + project.materials_cost;
-  const holdingTotal = project.holding_costs_monthly * 6;
-  const salePrice = project.actual_sale_price > 0 ? project.actual_sale_price : project.estimated_sale_price;
-  const estProfit = salePrice - totalInvestment - totalExpenses - holdingTotal;
-  const roi = totalInvestment > 0 ? ((estProfit / (totalInvestment + totalExpenses + holdingTotal)) * 100) : 0;
-
-  res.json({
-    ...project,
-    phases,
-    expenses,
-    milestones,
-    vendors: projectVendors,
-    computed: { totalInvestment, totalExpenses, holdingTotal, estProfit, roi: Math.round(roi * 10) / 10 },
-  });
-});
-
-router.put('/:id', (req, res) => {
-  const db = getDb();
-  const existing = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Project not found' });
-
-  const fields = [
-    'name', 'address', 'city', 'state', 'zip', 'status',
-    'purchase_price', 'legal_fees', 'inspection_cost', 'closing_costs',
-    'rehab_budget', 'labor_cost', 'materials_cost', 'holding_costs_monthly',
-    'estimated_sale_price', 'actual_sale_price',
-    'acquisition_date', 'target_completion_date', 'actual_completion_date',
-    'listed_date', 'sold_date', 'notes',
-  ];
-
-  const updates = fields
-    .filter(f => req.body[f] !== undefined)
-    .map(f => `${f} = ?`)
-    .join(', ');
-
-  const values = fields
-    .filter(f => req.body[f] !== undefined)
-    .map(f => req.body[f]);
-
-  if (updates.length > 0) {
-    db.prepare(`UPDATE projects SET ${updates}, updated_at = datetime('now') WHERE id = ?`).run(
-      ...values, req.params.id
-    );
+    const [project] = await sql`
+      INSERT INTO projects (id, name, address, city, state, zip, status, purchase_price, legal_fees, inspection_cost, closing_costs, rehab_budget, labor_cost, materials_cost, holding_costs_monthly, estimated_sale_price, actual_sale_price, acquisition_date, target_completion_date, actual_completion_date, listed_date, sold_date, notes)
+      VALUES (${id}, ${name}, ${address}, ${city}, ${state}, ${zip}, ${status}, ${purchase_price}, ${legal_fees}, ${inspection_cost}, ${closing_costs}, ${rehab_budget}, ${labor_cost}, ${materials_cost}, ${holding_costs_monthly}, ${estimated_sale_price}, ${actual_sale_price}, ${acquisition_date}, ${target_completion_date}, ${actual_completion_date}, ${listed_date}, ${sold_date}, ${notes})
+      RETURNING *
+    `;
+    for (const phaseName of phases as string[]) {
+      await sql`INSERT INTO renovation_phases (id, project_id, phase_name) VALUES (${uuid()}, ${id}, ${phaseName})`;
+    }
+    res.status(201).json(project);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create project' });
   }
-
-  res.json(db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id));
 });
 
-router.delete('/:id', (req, res) => {
-  const db = getDb();
-  const existing = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Project not found' });
-  db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
-  res.json({ success: true });
+router.get('/:id', async (req, res) => {
+  try {
+    const rows = await sql`SELECT * FROM projects WHERE id = ${req.params.id}`;
+    const project = rows[0] as any;
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const [phases, expenses, milestones, projectVendors] = await Promise.all([
+      sql`SELECT * FROM renovation_phases WHERE project_id = ${req.params.id} ORDER BY created_at`,
+      sql`SELECT * FROM expenses WHERE project_id = ${req.params.id} ORDER BY date DESC`,
+      sql`SELECT * FROM milestones WHERE project_id = ${req.params.id} ORDER BY due_date`,
+      sql`SELECT pv.*, v.name as vendor_name, v.company, v.phone, v.email, v.specialty, v.rating FROM project_vendors pv JOIN vendors v ON pv.vendor_id = v.id WHERE pv.project_id = ${req.params.id}`,
+    ]);
+
+    const totalInvestment = Number(project.purchase_price) + Number(project.legal_fees) + Number(project.inspection_cost) + Number(project.closing_costs);
+    const totalExpenses = Number(project.labor_cost) + Number(project.materials_cost);
+    const holdingTotal = Number(project.holding_costs_monthly) * 6;
+    const salePrice = Number(project.actual_sale_price) > 0 ? Number(project.actual_sale_price) : Number(project.estimated_sale_price);
+    const estProfit = salePrice - totalInvestment - totalExpenses - holdingTotal;
+    const roi = totalInvestment > 0 ? ((estProfit / (totalInvestment + totalExpenses + holdingTotal)) * 100) : 0;
+
+    res.json({ ...project, phases, expenses, milestones, vendors: projectVendors, computed: { totalInvestment, totalExpenses, holdingTotal, estProfit, roi: Math.round(roi * 10) / 10 } });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch project' });
+  }
+});
+
+router.put('/:id', async (req, res) => {
+  try {
+    const rows = await sql`SELECT * FROM projects WHERE id = ${req.params.id}`;
+    const e = rows[0] as any;
+    if (!e) return res.status(404).json({ error: 'Project not found' });
+    const b = req.body;
+
+    const [updated] = await sql`
+      UPDATE projects SET
+        name = ${b.name ?? e.name},
+        address = ${b.address ?? e.address},
+        city = ${b.city ?? e.city},
+        state = ${b.state ?? e.state},
+        zip = ${b.zip ?? e.zip},
+        status = ${b.status ?? e.status},
+        purchase_price = ${b.purchase_price ?? e.purchase_price},
+        legal_fees = ${b.legal_fees ?? e.legal_fees},
+        inspection_cost = ${b.inspection_cost ?? e.inspection_cost},
+        closing_costs = ${b.closing_costs ?? e.closing_costs},
+        rehab_budget = ${b.rehab_budget ?? e.rehab_budget},
+        labor_cost = ${b.labor_cost ?? e.labor_cost},
+        materials_cost = ${b.materials_cost ?? e.materials_cost},
+        holding_costs_monthly = ${b.holding_costs_monthly ?? e.holding_costs_monthly},
+        estimated_sale_price = ${b.estimated_sale_price ?? e.estimated_sale_price},
+        actual_sale_price = ${b.actual_sale_price ?? e.actual_sale_price},
+        acquisition_date = ${b.acquisition_date ?? e.acquisition_date},
+        target_completion_date = ${b.target_completion_date ?? e.target_completion_date},
+        actual_completion_date = ${b.actual_completion_date ?? e.actual_completion_date},
+        listed_date = ${b.listed_date ?? e.listed_date},
+        sold_date = ${b.sold_date ?? e.sold_date},
+        notes = ${b.notes ?? e.notes},
+        updated_at = NOW()
+      WHERE id = ${req.params.id}
+      RETURNING *
+    `;
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update project' });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const rows = await sql`SELECT id FROM projects WHERE id = ${req.params.id}`;
+    if (!rows[0]) return res.status(404).json({ error: 'Project not found' });
+    await sql`DELETE FROM projects WHERE id = ${req.params.id}`;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete project' });
+  }
 });
 
 export default router;

@@ -126,12 +126,13 @@ export default function Analyzer() {
     setErrorMsg(null);
     try {
       if (editingId) {
-        const updated = await api.analyzer.update(editingId, payload) as DealAnalysis;
-        setAnalyses(prev => prev.map(a => a.id === editingId ? updated : a));
+        await api.analyzer.update(editingId, payload);
       } else {
-        const created = await api.analyzer.create(payload) as DealAnalysis;
-        setAnalyses(prev => [created, ...prev]);
+        await api.analyzer.create(payload);
       }
+      // Re-fetch from server to confirm persistence (not just optimistic update)
+      const fresh = await api.analyzer.list() as DealAnalysis[];
+      setAnalyses(fresh);
       resetForm();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to save. Please try again.');

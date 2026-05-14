@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, Wallet, TrendingUp, Settings } from 'lucide-react';
+import { LayoutDashboard, Building2, Wallet, TrendingUp, Wrench, Settings } from 'lucide-react';
 
 const tabs = [
   { to: '/portfolio', label: 'Portfolio', Icon: LayoutDashboard },
   { to: '/projects', label: 'Projects', Icon: Building2 },
   { to: '/capital', label: 'Capital', Icon: Wallet },
   { to: '/analytics', label: 'Analytics', Icon: TrendingUp },
+  { to: '/vendors', label: 'Vendors', Icon: Wrench },
   { to: '/settings', label: 'Settings', Icon: Settings },
 ];
 
@@ -18,14 +19,14 @@ export default function BottomNav() {
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center py-3 gap-1 text-[10px] font-semibold tracking-wider uppercase transition-colors ${
+              `flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 text-[9px] font-semibold tracking-wider uppercase transition-colors ${
                 isActive ? 'text-brand' : 'text-gray-500'
               }`
             }
           >
             {({ isActive }) => (
               <>
-                <Icon size={20} className={isActive ? 'text-brand' : 'text-gray-500'} />
+                <Icon size={18} className={isActive ? 'text-brand' : 'text-gray-500'} />
                 <span>{label}</span>
               </>
             )}

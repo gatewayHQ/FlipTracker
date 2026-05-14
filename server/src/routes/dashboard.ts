@@ -1,11 +1,12 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import sql from '../db/connection';
+import { requireAuth, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/', async (_req, res) => {
+router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const projects = await sql`SELECT * FROM projects`;
+    const projects = await sql`SELECT * FROM projects WHERE user_id = ${req.userId}`;
 
     const total = projects.length;
     const active = projects.filter(p => ['acquired', 'renovation', 'listed'].includes(p.status as string));
@@ -19,7 +20,7 @@ router.get('/', async (_req, res) => {
       .filter(p => p.status !== 'cancelled')
       .reduce((sum, p) => {
         const totalCost = Number(p.purchase_price) + Number(p.legal_fees) + Number(p.inspection_cost)
-          + Number(p.closing_costs) + Number(p.rehab_budget) + (Number(p.holding_costs_monthly) * 6);
+          + Number(p.closing_costs) + Number(p.labor_cost) + Number(p.materials_cost) + (Number(p.holding_costs_monthly) * 6);
         const salePrice = Number(p.actual_sale_price) > 0 ? Number(p.actual_sale_price) : Number(p.estimated_sale_price);
         return sum + (salePrice - totalCost);
       }, 0);
@@ -34,11 +35,26 @@ router.get('/', async (_req, res) => {
       }, 0);
       avgDaysToFlip = Math.round(totalDays / soldProjects.length);
     } else {
-      avgDaysToFlip = 42;
+      avgDaysToFlip = 0;
     }
+
+    // Overdue milestones across all user projects
+    const today = new Date().toISOString().slice(0, 10);
+    const overdueMilestones = await sql`
+      SELECT m.id, m.title, m.due_date, m.project_id, p.name as project_name, p.address
+      FROM milestones m
+      JOIN projects p ON m.project_id = p.id
+      WHERE p.user_id = ${req.userId}
+        AND m.completed = 0
+        AND m.due_date != ''
+        AND m.due_date < ${today}
+      ORDER BY m.due_date ASC
+      LIMIT 5
+    `;
 
     const recentProjectIds = [...projects]
       .sort((a, b) => new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime())
+      .filter(p => ['acquired', 'renovation', 'listed'].includes(p.status as string))
       .slice(0, 5)
       .map(p => p.id);
 
@@ -48,7 +64,20 @@ router.get('/', async (_req, res) => {
         const phases = await sql`SELECT status FROM renovation_phases WHERE project_id = ${id}`;
         const completedPhases = phases.filter(ph => ph.status === 'completed').length;
         const progress = phases.length > 0 ? Math.round((completedPhases / phases.length) * 100) : 0;
-        return { ...p, phase_count: phases.length, completed_phases: completedPhases, progress };
+
+        // Compute health: over_budget | at_risk | on_track
+        const rehabSpent = Number(p.labor_cost) + Number(p.materials_cost);
+        const budget = Number(p.rehab_budget);
+        const overdueMsCount = await sql`
+          SELECT COUNT(*) as c FROM milestones
+          WHERE project_id = ${id} AND completed = 0 AND due_date != '' AND due_date < ${today}
+        `;
+        const isOverBudget = budget > 0 && rehabSpent > budget;
+        const isAtRisk = budget > 0 && rehabSpent / budget > 0.9;
+        const hasOverdue = Number((overdueMsCount[0] as any).c) > 0;
+        const health = isOverBudget || hasOverdue ? 'over_budget' : isAtRisk ? 'at_risk' : 'on_track';
+
+        return { ...p, phase_count: phases.length, completed_phases: completedPhases, progress, health };
       })
     );
 
@@ -62,6 +91,7 @@ router.get('/', async (_req, res) => {
         soldProjects: projects.filter(p => p.status === 'sold').length,
       },
       recentProjects,
+      overdueMilestones,
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch dashboard data' });

@@ -1,8 +1,25 @@
 export type ProjectStatus = 'acquired' | 'renovation' | 'listed' | 'sold' | 'cancelled';
 export type PhaseStatus = 'pending' | 'in_progress' | 'completed';
+export type ProjectHealth = 'on_track' | 'at_risk' | 'over_budget';
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  created_at: string;
+  settings?: UserSettings;
+}
+
+export interface UserSettings {
+  capital_goal: number;
+  target_roi: number;
+  target_flip_days: number;
+  notifications_enabled: number;
+}
 
 export interface Project {
   id: string;
+  user_id: string;
   name: string;
   address: string;
   city: string;
@@ -33,6 +50,7 @@ export interface Project {
   progress?: number;
   total_investment?: number;
   est_profit?: number;
+  health?: ProjectHealth;
 }
 
 export interface ProjectDetail extends Project {
@@ -40,6 +58,7 @@ export interface ProjectDetail extends Project {
   expenses: Expense[];
   milestones: Milestone[];
   vendors: ProjectVendor[];
+  loans: Loan[];
   computed: {
     totalInvestment: number;
     totalExpenses: number;
@@ -65,6 +84,7 @@ export interface RenovationPhase {
 
 export interface Vendor {
   id: string;
+  user_id: string;
   name: string;
   company: string;
   phone: string;
@@ -73,6 +93,10 @@ export interface Vendor {
   rating: number;
   hourly_rate: number;
   notes: string;
+  license_number: string;
+  license_expiry: string;
+  insurance_expiry: string;
+  w9_on_file: number;
   created_at: string;
 }
 
@@ -122,6 +146,30 @@ export interface Milestone {
   created_at: string;
 }
 
+export interface Loan {
+  id: string;
+  project_id: string;
+  lender: string;
+  loan_amount: number;
+  interest_rate: number;
+  points: number;
+  term_months: number;
+  monthly_payment: number;
+  origination_date: string;
+  maturity_date: string;
+  notes: string;
+  created_at: string;
+}
+
+export interface OverdueMilestone {
+  id: string;
+  title: string;
+  due_date: string;
+  project_id: string;
+  project_name: string;
+  address: string;
+}
+
 export interface DashboardStats {
   totalProjects: number;
   capitalDeployed: number;
@@ -133,7 +181,8 @@ export interface DashboardStats {
 
 export interface DashboardData {
   stats: DashboardStats;
-  recentProjects: (Project & { phase_count: number; completed_phases: number; progress: number })[];
+  recentProjects: (Project & { phase_count: number; completed_phases: number; progress: number; health: ProjectHealth })[];
+  overdueMilestones: OverdueMilestone[];
 }
 
 export const RENOVATION_PHASES = [
@@ -160,6 +209,12 @@ export const STATUS_COLORS: Record<ProjectStatus, string> = {
   listed: 'bg-purple-500/20 text-purple-400',
   sold: 'bg-green-500/20 text-green-400',
   cancelled: 'bg-red-500/20 text-red-400',
+};
+
+export const HEALTH_COLORS: Record<string, string> = {
+  on_track: 'bg-green-500',
+  at_risk: 'bg-yellow-500',
+  over_budget: 'bg-red-500',
 };
 
 export const EXPENSE_CATEGORIES = [

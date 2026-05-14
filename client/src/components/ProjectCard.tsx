@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { MapPin, TrendingUp } from 'lucide-react';
 import type { Project } from '../types';
-import { STATUS_COLORS } from '../types';
+import { STATUS_COLORS, HEALTH_COLORS } from '../types';
 import { fmt } from '../lib/api';
 
 interface Props {
@@ -29,9 +29,17 @@ export default function ProjectCard({ project }: Props) {
             <span className="text-xs text-gray-400 truncate">{project.city}, {project.state}</span>
           </div>
         </div>
-        <span className={`status-badge ml-2 flex-shrink-0 ${STATUS_COLORS[project.status]}`}>
-          {project.status}
-        </span>
+        <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+          {project.health && (
+            <span
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${HEALTH_COLORS[project.health]}`}
+              title={project.health.replace('_', ' ')}
+            />
+          )}
+          <span className={`status-badge ${STATUS_COLORS[project.status]}`}>
+            {project.status}
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3 mb-3">

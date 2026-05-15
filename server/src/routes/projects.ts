@@ -6,8 +6,10 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 const router = Router();
 
 router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
+  console.log('[projects list] userId:', req.userId);
   try {
     const projects = await sql`SELECT * FROM projects WHERE user_id = ${req.userId} ORDER BY created_at DESC`;
+    console.log('[projects list] found:', projects.length);
     const projectIds = projects.map((p: any) => p.id);
     const allPhases = projectIds.length > 0
       ? await sql`SELECT project_id, status FROM renovation_phases WHERE project_id IN ${sql(projectIds)}`
@@ -24,12 +26,14 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
       return { ...p, phase_count: phases.length, completed_phases: completedPhases, progress, total_investment: totalInvestment, est_profit: estProfit };
     });
     res.json(enriched);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch projects' });
+  } catch (err: any) {
+    console.error('[projects list]', err);
+    res.status(500).json({ error: 'Failed to fetch projects', detail: err?.message });
   }
 });
 
 router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
+  console.log('[projects create] userId:', req.userId, 'address:', req.body?.address);
   try {
     const id = uuid();
     const {
@@ -51,9 +55,11 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
         sql`INSERT INTO renovation_phases (id, project_id, phase_name) VALUES (${uuid()}, ${id}, ${phaseName})`
       )
     );
+    console.log('[projects create] success id:', project?.id, 'user_id:', project?.user_id);
     res.status(201).json(project);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to create project' });
+  } catch (err: any) {
+    console.error('[projects create]', err);
+    res.status(500).json({ error: 'Failed to create project', detail: err?.message });
   }
 });
 

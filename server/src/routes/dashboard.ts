@@ -5,8 +5,10 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 const router = Router();
 
 router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
+  console.log('[dashboard] userId:', req.userId);
   try {
     const projects = await sql`SELECT * FROM projects WHERE user_id = ${req.userId}`;
+    console.log('[dashboard] projects:', projects.length);
 
     const total = projects.length;
     const active = projects.filter(p => ['acquired', 'renovation', 'listed'].includes(p.status as string));
@@ -90,8 +92,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
       recentProjects,
       overdueMilestones,
     });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch dashboard data' });
+  } catch (err: any) {
+    console.error('[dashboard]', err);
+    res.status(500).json({ error: 'Failed to fetch dashboard data', detail: err?.message });
   }
 });
 

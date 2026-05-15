@@ -5,25 +5,45 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
+// Neon's neon() HTTP driver returns NUMERIC columns as strings to preserve
+// arbitrary precision. Coerce every money field to a JS number at the boundary
+// so all downstream client code receives native numbers, not strings.
+function coerceProject(p: any) {
+  return {
+    ...p,
+    purchase_price: Number(p.purchase_price) || 0,
+    legal_fees: Number(p.legal_fees) || 0,
+    inspection_cost: Number(p.inspection_cost) || 0,
+    closing_costs: Number(p.closing_costs) || 0,
+    rehab_budget: Number(p.rehab_budget) || 0,
+    labor_cost: Number(p.labor_cost) || 0,
+    materials_cost: Number(p.materials_cost) || 0,
+    holding_costs_monthly: Number(p.holding_costs_monthly) || 0,
+    estimated_sale_price: Number(p.estimated_sale_price) || 0,
+    actual_sale_price: Number(p.actual_sale_price) || 0,
+  };
+}
+
 router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
   console.log('[projects list] userId:', req.userId);
   try {
-    const projects = await sql`SELECT * FROM projects WHERE user_id = ${req.userId} ORDER BY created_at DESC`;
-    console.log('[projects list] found:', projects.length);
-    const projectIds = projects.map((p: any) => p.id);
+    const rows = await sql`SELECT * FROM projects WHERE user_id = ${req.userId} ORDER BY created_at DESC`;
+    console.log('[projects list] found:', rows.length);
+    const projectIds = rows.map((p: any) => p.id);
     const allPhases = projectIds.length > 0
       ? await sql`SELECT project_id, status FROM renovation_phases WHERE project_id = ANY(${projectIds as any})`
       : [];
-    const enriched = projects.map((p: any) => {
+    const enriched = rows.map((p: any) => {
+      const project = coerceProject(p);
       const phases = allPhases.filter((ph: any) => ph.project_id === p.id);
       const completedPhases = phases.filter((ph: any) => ph.status === 'completed').length;
       const progress = phases.length > 0 ? Math.round((completedPhases / phases.length) * 100) : 0;
-      const totalInvestment = Number(p.purchase_price) + Number(p.legal_fees) + Number(p.inspection_cost) + Number(p.closing_costs);
-      const rehabSpent = Number(p.labor_cost) + Number(p.materials_cost);
-      const holdingTotal = Number(p.holding_costs_monthly) * 6;
-      const salePrice = Number(p.actual_sale_price) > 0 ? Number(p.actual_sale_price) : Number(p.estimated_sale_price);
-      const estProfit = salePrice - totalInvestment - rehabSpent - holdingTotal;
-      return { ...p, phase_count: phases.length, completed_phases: completedPhases, progress, total_investment: totalInvestment, est_profit: estProfit };
+      const totalInvestment = project.purchase_price + project.legal_fees + project.inspection_cost + project.closing_costs;
+      const rehabSpent = project.labor_cost + project.materials_cost;
+      const holdingTotal = project.holding_costs_monthly * 6;
+      const salePrice = project.actual_sale_price > 0 ? project.actual_sale_price : project.estimated_sale_price;
+      const estProfit = salePrice > 0 ? salePrice - totalInvestment - rehabSpent - holdingTotal : 0;
+      return { ...project, phase_count: phases.length, completed_phases: completedPhases, progress, total_investment: totalInvestment, est_profit: estProfit };
     });
     res.json(enriched);
   } catch (err: any) {
@@ -56,7 +76,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
       )
     );
     console.log('[projects create] success id:', project?.id, 'user_id:', project?.user_id);
-    res.status(201).json(project);
+    res.status(201).json(coerceProject(project));
   } catch (err: any) {
     console.error('[projects create]', err);
     res.status(500).json({ error: 'Failed to create project', detail: err?.message });
@@ -66,8 +86,8 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
 router.get('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const rows = await sql`SELECT * FROM projects WHERE id = ${req.params.id} AND user_id = ${req.userId}`;
-    const project = rows[0] as any;
-    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (!rows[0]) return res.status(404).json({ error: 'Project not found' });
+    const project = coerceProject(rows[0]);
 
     const [phases, expenses, milestones, projectVendors, loans, comps, notes, documents] = await Promise.all([
       sql`SELECT * FROM renovation_phases WHERE project_id = ${req.params.id} ORDER BY created_at`,
@@ -80,7 +100,6 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
       sql`SELECT * FROM documents WHERE project_id = ${req.params.id} ORDER BY created_at DESC`,
     ]);
 
-    // Fetch tasks for each phase
     const phaseIds = phases.map((ph: any) => ph.id);
     const allTasks = phaseIds.length > 0
       ? await sql`SELECT * FROM phase_tasks WHERE phase_id = ANY(${phaseIds as any}) ORDER BY sort_order, created_at`
@@ -90,11 +109,11 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
       tasks: (allTasks as any[]).filter(t => t.phase_id === ph.id),
     }));
 
-    const totalInvestment = Number(project.purchase_price) + Number(project.legal_fees) + Number(project.inspection_cost) + Number(project.closing_costs);
-    const totalExpenses = Number(project.labor_cost) + Number(project.materials_cost);
-    const holdingTotal = Number(project.holding_costs_monthly) * 6;
-    const salePrice = Number(project.actual_sale_price) > 0 ? Number(project.actual_sale_price) : Number(project.estimated_sale_price);
-    const estProfit = salePrice - totalInvestment - totalExpenses - holdingTotal;
+    const totalInvestment = project.purchase_price + project.legal_fees + project.inspection_cost + project.closing_costs;
+    const totalExpenses = project.labor_cost + project.materials_cost;
+    const holdingTotal = project.holding_costs_monthly * 6;
+    const salePrice = project.actual_sale_price > 0 ? project.actual_sale_price : project.estimated_sale_price;
+    const estProfit = salePrice > 0 ? salePrice - totalInvestment - totalExpenses - holdingTotal : 0;
     const roi = (totalInvestment + totalExpenses + holdingTotal) > 0
       ? ((estProfit / (totalInvestment + totalExpenses + holdingTotal)) * 100)
       : 0;
@@ -152,9 +171,10 @@ router.put('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
       WHERE id = ${req.params.id}
       RETURNING *
     `;
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to update project' });
+    res.json(coerceProject(updated));
+  } catch (err: any) {
+    console.error('[projects update]', err);
+    res.status(500).json({ error: 'Failed to update project', detail: err?.message });
   }
 });
 
@@ -163,8 +183,9 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
     const rows = await sql`DELETE FROM projects WHERE id = ${req.params.id} AND user_id = ${req.userId} RETURNING id`;
     if (!rows[0]) return res.status(404).json({ error: 'Project not found' });
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete project' });
+  } catch (err: any) {
+    console.error('[projects delete]', err);
+    res.status(500).json({ error: 'Failed to delete project', detail: err?.message });
   }
 });
 

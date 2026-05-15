@@ -15,6 +15,10 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   }
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+    if (!decoded.userId) {
+      res.status(401).json({ error: 'Invalid token payload' });
+      return;
+    }
     req.userId = decoded.userId;
     next();
   } catch {

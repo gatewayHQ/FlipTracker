@@ -111,6 +111,7 @@ export default function AddProject() {
     e.preventDefault();
     if (!form.address.trim() || !form.city.trim() || !form.state.trim()) {
       setError('Address, city, and state are required.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     setSaving(true);
@@ -312,7 +313,13 @@ export default function AddProject() {
         </div>
 
         {/* Save button */}
-        <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto px-5 pb-8 pt-4 bg-gradient-to-t from-surface-900 via-surface-900/95 to-transparent">
+        <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto px-5 pb-6 pt-3 bg-gradient-to-t from-surface-900 via-surface-900/95 to-transparent">
+          {error && (
+            <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2 mb-3">
+              <AlertCircle size={14} className="text-red-400 flex-shrink-0" />
+              <span className="text-red-400 text-xs">{error}</span>
+            </div>
+          )}
           <button type="submit" disabled={saving} className="btn-primary rounded-2xl py-5">
             {saving ? 'Saving...' : isEdit ? 'Update Project' : 'Save Project'}
           </button>

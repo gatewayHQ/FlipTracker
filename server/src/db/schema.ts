@@ -240,4 +240,15 @@ export async function initializeSchema(): Promise<void> {
   await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS insurance_expiry TEXT DEFAULT ''`;
   await sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS w9_on_file INTEGER DEFAULT 0`;
   await sql`ALTER TABLE milestones ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT ''`;
+
+  // Purge orphaned rows that were saved without a user_id (silent null write bug),
+  // then enforce NOT NULL so a missing userId causes a hard error going forward.
+  try {
+    await sql`DELETE FROM projects WHERE user_id IS NULL`;
+    await sql`DELETE FROM vendors  WHERE user_id IS NULL`;
+    await sql`ALTER TABLE projects ALTER COLUMN user_id SET NOT NULL`;
+    await sql`ALTER TABLE vendors  ALTER COLUMN user_id SET NOT NULL`;
+  } catch (err) {
+    console.warn('[schema] NOT NULL migration skipped:', err);
+  }
 }

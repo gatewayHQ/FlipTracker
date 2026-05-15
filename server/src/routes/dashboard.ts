@@ -61,7 +61,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
       .map(p => p.id);
 
     const allRecentPhases = recentProjectIds.length > 0
-      ? await sql`SELECT project_id, status FROM renovation_phases WHERE project_id IN ${sql(recentProjectIds)}`
+      ? await sql`SELECT project_id, status FROM renovation_phases WHERE project_id = ANY(${recentProjectIds as any})`
       : [];
 
     const recentProjects = recentProjectIds.map((id) => {

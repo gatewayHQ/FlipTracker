@@ -25,6 +25,7 @@ export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [project, setProject] = useState<PD | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('overview');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -73,7 +74,10 @@ export default function ProjectDetail() {
     api.projects.get(id).then(d => {
       setProject(d as PD);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((err: Error) => {
+      setLoadError(err.message || 'Failed to load project');
+      setLoading(false);
+    });
   };
 
   useEffect(() => {
@@ -303,9 +307,10 @@ export default function ProjectDetail() {
   if (!project) {
     return (
       <div className="min-h-full bg-surface-900 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-400 mb-4">Project not found</p>
-          <button onClick={() => navigate('/projects')} className="text-brand">Back to Projects</button>
+        <div className="text-center px-6">
+          <p className="text-gray-400 mb-2">{loadError || 'Project not found'}</p>
+          {loadError && <p className="text-xs text-gray-600 mb-4">Check Vercel function logs for details</p>}
+          <button onClick={() => navigate('/projects')} className="text-brand text-sm">Back to Projects</button>
         </div>
       </div>
     );

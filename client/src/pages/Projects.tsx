@@ -197,9 +197,11 @@ export default function Projects() {
                         </div>
                       ) : (
                         colProjects.map(p => {
-                          const salePrice = p.actual_sale_price > 0 ? p.actual_sale_price : p.estimated_sale_price;
-                          const totalCost = p.purchase_price + p.legal_fees + p.inspection_cost + p.closing_costs + p.rehab_budget;
-                          const profit = salePrice - totalCost;
+                          const actualSale = Number(p.actual_sale_price) || 0;
+                          const estimatedSale = Number(p.estimated_sale_price) || 0;
+                          const salePrice = actualSale > 0 ? actualSale : estimatedSale;
+                          const totalCost = (Number(p.purchase_price) || 0) + (Number(p.legal_fees) || 0) + (Number(p.inspection_cost) || 0) + (Number(p.closing_costs) || 0) + (Number(p.rehab_budget) || 0);
+                          const profit = salePrice > 0 ? salePrice - totalCost : 0;
                           return (
                             <button
                               key={p.id}

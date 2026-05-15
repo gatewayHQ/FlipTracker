@@ -126,4 +126,22 @@ router.put('/settings', requireAuth, async (req: AuthRequest, res: Response) => 
   }
 });
 
+router.get('/debug', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const [userRow] = await sql`SELECT id, email FROM users WHERE id = ${req.userId}`;
+    const [myCount] = await sql`SELECT COUNT(*) AS count FROM projects WHERE user_id = ${req.userId}`;
+    const [totalCount] = await sql`SELECT COUNT(*) AS count FROM projects`;
+    const sampleProjects = await sql`SELECT id, name, user_id FROM projects LIMIT 5`;
+    res.json({
+      authenticatedUserId: req.userId,
+      email: userRow?.email ?? null,
+      yourProjectCount: Number(myCount?.count ?? 0),
+      totalProjectsInDb: Number(totalCount?.count ?? 0),
+      sampleProjects,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Debug failed', detail: err?.message });
+  }
+});
+
 export default router;

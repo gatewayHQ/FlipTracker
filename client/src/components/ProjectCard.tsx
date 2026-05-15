@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { MapPin, TrendingUp } from 'lucide-react';
+import { MapPin, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import type { Project } from '../types';
 import { STATUS_COLORS, HEALTH_COLORS } from '../types';
 import { fmt } from '../lib/api';
@@ -8,71 +8,109 @@ interface Props {
   project: Project & { progress?: number };
 }
 
+function MetricCell({ label, value, className = '' }: { label: string; value: string; className?: string }) {
+  return (
+    <div>
+      <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">{label}</div>
+      <div className={`text-sm font-bold tabular-nums ${className || 'text-white'}`}>{value}</div>
+    </div>
+  );
+}
+
 export default function ProjectCard({ project }: Props) {
   const navigate = useNavigate();
   const progress = project.progress ?? 0;
-  const salePrice = project.actual_sale_price > 0 ? project.actual_sale_price : project.estimated_sale_price;
-  const totalCost = project.purchase_price + project.legal_fees + project.inspection_cost + project.closing_costs
-    + project.rehab_budget;
-  const profit = salePrice - totalCost;
+
+  // Defensively coerce — Neon can return NUMERIC as strings even after server coercion
+  const purchasePrice = Number(project.purchase_price) || 0;
+  const legalFees = Number(project.legal_fees) || 0;
+  const inspectionCost = Number(project.inspection_cost) || 0;
+  const closingCosts = Number(project.closing_costs) || 0;
+  const rehabBudget = Number(project.rehab_budget) || 0;
+  const estimatedSale = Number(project.estimated_sale_price) || 0;
+  const actualSale = Number(project.actual_sale_price) || 0;
+
+  const salePrice = actualSale > 0 ? actualSale : estimatedSale;
+  const totalCost = purchasePrice + legalFees + inspectionCost + closingCosts + rehabBudget;
+  const profit = salePrice > 0 ? salePrice - totalCost : null;
+
+  const ProfitIcon = profit === null ? Minus : profit >= 0 ? TrendingUp : TrendingDown;
+  const profitColor = profit === null ? 'text-gray-600' : profit >= 0 ? 'text-green-400' : 'text-red-400';
+  const profitLabel = profit === null ? '—' : `${profit >= 0 ? '+' : ''}${fmt(profit)}`;
+
+  const statusLabel = project.status.charAt(0).toUpperCase() + project.status.slice(1);
 
   return (
     <button
       onClick={() => navigate(`/projects/${project.id}`)}
-      className="card w-full text-left hover:border-brand/40 transition-colors active:scale-[0.99]"
+      className="card w-full text-left hover:border-brand/40 transition-all duration-150 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+      aria-label={`Open project: ${project.name || project.address}, ${project.city}, ${project.state}`}
     >
-      <div className="flex items-start justify-between mb-3">
+      {/* Header row */}
+      <div className="flex items-start justify-between mb-3 gap-2">
         <div className="flex-1 min-w-0">
-          <h3 className="font-bold text-white text-base truncate">{project.name || project.address}</h3>
-          <div className="flex items-center gap-1 mt-1">
-            <MapPin size={11} className="text-gray-500 flex-shrink-0" />
+          <h3 className="font-bold text-white text-base leading-snug truncate">
+            {project.name || project.address}
+          </h3>
+          <div className="flex items-center gap-1 mt-0.5">
+            <MapPin size={10} className="text-gray-500 flex-shrink-0" aria-hidden="true" />
             <span className="text-xs text-gray-400 truncate">{project.city}, {project.state}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {project.health && (
             <span
-              className={`w-2 h-2 rounded-full flex-shrink-0 ${HEALTH_COLORS[project.health]}`}
-              title={project.health.replace('_', ' ')}
+              className={`w-2 h-2 rounded-full ${HEALTH_COLORS[project.health]}`}
+              role="img"
+              aria-label={`Health: ${project.health.replace('_', ' ')}`}
             />
           )}
-          <span className={`status-badge ${STATUS_COLORS[project.status]}`}>
-            {project.status}
+          <span className={`status-badge ${STATUS_COLORS[project.status]}`} aria-label={`Status: ${statusLabel}`}>
+            {statusLabel}
           </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-3">
-        <div>
-          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Purchase</div>
-          <div className="text-sm font-bold text-white">{fmt(project.purchase_price)}</div>
-        </div>
-        <div>
-          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Est. Sale</div>
-          <div className="text-sm font-bold text-white">{fmt(project.estimated_sale_price)}</div>
-        </div>
+      {/* Metrics row */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <MetricCell label="Purchase" value={purchasePrice > 0 ? fmt(purchasePrice) : '—'} />
+        <MetricCell label="Est. Sale" value={salePrice > 0 ? fmt(salePrice) : '—'} />
         <div>
           <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Est. Profit</div>
-          <div className={`text-sm font-bold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {profit >= 0 ? '+' : ''}{fmt(profit)}
+          <div className={`text-sm font-bold tabular-nums flex items-center gap-1 ${profitColor}`}>
+            <ProfitIcon size={11} aria-hidden="true" />
+            {profitLabel}
           </div>
         </div>
       </div>
 
-      {project.phase_count !== undefined && project.phase_count > 0 && (
+      {/* Progress bar — only when project has renovation phases */}
+      {(project.phase_count ?? 0) > 0 && (
         <div>
-          <div className="flex justify-between text-[10px] text-gray-500 mb-1">
+          <div className="flex justify-between text-[10px] text-gray-500 mb-1.5">
             <span className="flex items-center gap-1">
-              <TrendingUp size={10} /> Renovation Progress
+              <TrendingUp size={9} aria-hidden="true" />
+              Renovation Progress
             </span>
-            <span>{progress}%</span>
+            <span aria-label={`${progress}% complete`}>{progress}%</span>
           </div>
-          <div className="h-1.5 bg-surface-400 rounded-full overflow-hidden">
+          <div
+            className="h-1.5 bg-surface-600 rounded-full overflow-hidden"
+            role="progressbar"
+            aria-valuenow={progress}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Renovation progress"
+          >
             <div
-              className="h-full rounded-full transition-all"
+              className="h-full rounded-full transition-all duration-500"
               style={{
                 width: `${progress}%`,
-                background: progress >= 80 ? 'linear-gradient(90deg,#f97316,#ef4444)' : 'linear-gradient(90deg,#f97316,#fb923c)',
+                background: progress >= 90
+                  ? 'linear-gradient(90deg,#f97316,#ef4444)'
+                  : progress >= 60
+                  ? 'linear-gradient(90deg,#f59e0b,#f97316)'
+                  : 'linear-gradient(90deg,#f97316,#fb923c)',
               }}
             />
           </div>

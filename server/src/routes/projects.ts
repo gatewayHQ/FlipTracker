@@ -12,7 +12,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
     console.log('[projects list] found:', projects.length);
     const projectIds = projects.map((p: any) => p.id);
     const allPhases = projectIds.length > 0
-      ? await sql`SELECT project_id, status FROM renovation_phases WHERE project_id IN ${sql(projectIds)}`
+      ? await sql`SELECT project_id, status FROM renovation_phases WHERE project_id = ANY(${projectIds as any})`
       : [];
     const enriched = projects.map((p: any) => {
       const phases = allPhases.filter((ph: any) => ph.project_id === p.id);
@@ -83,7 +83,7 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
     // Fetch tasks for each phase
     const phaseIds = phases.map((ph: any) => ph.id);
     const allTasks = phaseIds.length > 0
-      ? await sql`SELECT * FROM phase_tasks WHERE phase_id IN ${sql(phaseIds)} ORDER BY sort_order, created_at`
+      ? await sql`SELECT * FROM phase_tasks WHERE phase_id = ANY(${phaseIds as any}) ORDER BY sort_order, created_at`
       : [];
     const phasesWithTasks = phases.map((ph: any) => ({
       ...ph,
@@ -111,8 +111,9 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
       documents,
       computed: { totalInvestment, totalExpenses, holdingTotal, estProfit, roi: Math.round(roi * 10) / 10 },
     });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch project' });
+  } catch (err: any) {
+    console.error('[projects get]', err);
+    res.status(500).json({ error: 'Failed to fetch project', detail: err?.message });
   }
 });
 
